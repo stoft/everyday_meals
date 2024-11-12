@@ -5,6 +5,7 @@
 - [ ] Add an up/down button to move meals up and down
 - [ ] Add a "Buy me a coffee" button
 - [ ] Add sync to CouchBase
+- [ ] Convert to a PWA
 
 ### DOING
 
