@@ -259,9 +259,9 @@ var Some = class extends CustomType {
 };
 var None = class extends CustomType {
 };
-function to_result(option2, e) {
-  if (option2 instanceof Some) {
-    let a = option2[0];
+function to_result(option, e) {
+  if (option instanceof Some) {
+    let a = option[0];
     return new Ok(a);
   } else {
     return new Error(e);
@@ -1310,6 +1310,18 @@ function keys(dict) {
 }
 
 // build/dev/javascript/gleam_stdlib/gleam/list.mjs
+var Continue = class extends CustomType {
+  constructor(x0) {
+    super();
+    this[0] = x0;
+  }
+};
+var Stop = class extends CustomType {
+  constructor(x0) {
+    super();
+    this[0] = x0;
+  }
+};
 function count_length(loop$list, loop$count) {
   while (true) {
     let list = loop$list;
@@ -1485,6 +1497,29 @@ function do_index_fold(loop$over, loop$acc, loop$with, loop$index) {
 function index_fold(list, initial, fun) {
   return do_index_fold(list, initial, fun, 0);
 }
+function fold_until(loop$list, loop$initial, loop$fun) {
+  while (true) {
+    let list = loop$list;
+    let initial = loop$initial;
+    let fun = loop$fun;
+    if (list.hasLength(0)) {
+      return initial;
+    } else {
+      let first$1 = list.head;
+      let rest$1 = list.tail;
+      let $ = fun(initial, first$1);
+      if ($ instanceof Continue) {
+        let next_accumulator = $[0];
+        loop$list = rest$1;
+        loop$initial = next_accumulator;
+        loop$fun = fun;
+      } else {
+        let b = $[0];
+        return b;
+      }
+    }
+  }
+}
 
 // build/dev/javascript/gleam_stdlib/gleam/string_builder.mjs
 function from_strings(strings) {
@@ -1564,11 +1599,11 @@ function try$(result, fun) {
 
 // build/dev/javascript/gleam_stdlib/gleam/dynamic.mjs
 var DecodeError = class extends CustomType {
-  constructor(expected, found, path) {
+  constructor(expected, found, path2) {
     super();
     this.expected = expected;
     this.found = found;
-    this.path = path;
+    this.path = path2;
   }
 };
 function classify(data) {
@@ -1675,10 +1710,10 @@ var Text = class extends CustomType {
   }
 };
 var Element = class extends CustomType {
-  constructor(key, namespace, tag, attrs, children2, self_closing, void$) {
+  constructor(key, namespace2, tag, attrs, children2, self_closing, void$) {
     super();
     this.key = key;
-    this.namespace = namespace;
+    this.namespace = namespace2;
     this.tag = tag;
     this.attrs = attrs;
     this.children = children2;
@@ -1820,6 +1855,9 @@ function element(tag, attrs, children2) {
   } else {
     return new Element("", "", tag, attrs, children2, false, false);
   }
+}
+function namespaced(namespace2, tag, attrs, children2) {
+  return new Element("", namespace2, tag, attrs, children2, false, false);
 }
 function text(content) {
   return new Text(content);
@@ -1979,9 +2017,9 @@ function morph(prev, next, dispatch) {
   return out;
 }
 function createElementNode({ prev, next, dispatch, stack }) {
-  const namespace = next.namespace || "http://www.w3.org/1999/xhtml";
+  const namespace2 = next.namespace || "http://www.w3.org/1999/xhtml";
   const canMorph = prev && prev.nodeType === Node.ELEMENT_NODE && prev.localName === next.tag && prev.namespaceURI === (next.namespace || "http://www.w3.org/1999/xhtml");
-  const el = canMorph ? prev : namespace ? document.createElementNS(namespace, next.tag) : document.createElement(next.tag);
+  const el = canMorph ? prev : namespace2 ? document.createElementNS(namespace2, next.tag) : document.createElement(next.tag);
   let handlersForEl;
   if (!registeredHandlers.has(el)) {
     const emptyHandlers = /* @__PURE__ */ new Map();
@@ -2144,14 +2182,14 @@ function lustreServerEventHandler(event2) {
     tag,
     data: include.reduce(
       (data2, property) => {
-        const path = property.split(".");
-        for (let i = 0, o = data2, e = event2; i < path.length; i++) {
-          if (i === path.length - 1) {
-            o[path[i]] = e[path[i]];
+        const path2 = property.split(".");
+        for (let i = 0, o = data2, e = event2; i < path2.length; i++) {
+          if (i === path2.length - 1) {
+            o[path2[i]] = e[path2[i]];
           } else {
-            o[path[i]] ??= {};
-            e = e[path[i]];
-            o = o[path[i]];
+            o[path2[i]] ??= {};
+            e = e[path2[i]];
+            o = o[path2[i]];
           }
         }
         return data2;
@@ -2361,10 +2399,10 @@ var LustreClientApplication = class _LustreClientApplication {
           composed: true
         })
       );
-      const select2 = () => {
+      const select = () => {
       };
       const root = this.root;
-      effect({ dispatch, emit: emit2, select: select2, root });
+      effect({ dispatch, emit: emit2, select, root });
     }
     if (this.#queue.length > 0) {
       return this.#flush(effects, didUpdate);
@@ -2476,10 +2514,10 @@ var LustreServerApplication = class _LustreServerApplication {
           composed: true
         })
       );
-      const select2 = () => {
+      const select = () => {
       };
       const root = null;
-      effect({ dispatch, emit: emit2, select: select2, root });
+      effect({ dispatch, emit: emit2, select, root });
     }
     if (this.#queue.length > 0) {
       return this.#flush(didUpdate, effects);
@@ -2547,12 +2585,6 @@ function button(attrs, children2) {
 function input(attrs) {
   return element("input", attrs, toList([]));
 }
-function option(attrs, label) {
-  return element("option", attrs, toList([text(label)]));
-}
-function select(attrs, children2) {
-  return element("select", attrs, children2);
-}
 
 // build/dev/javascript/lustre/lustre/event.mjs
 function on2(name, handler) {
@@ -2595,6 +2627,51 @@ function now() {
 }
 function toISOString(d) {
   return d.toISOString();
+}
+
+// build/dev/javascript/lustre/lustre/element/svg.mjs
+var namespace = "http://www.w3.org/2000/svg";
+function svg(attrs, children2) {
+  return namespaced(namespace, "svg", attrs, children2);
+}
+function path(attrs) {
+  return namespaced(namespace, "path", attrs, toList([]));
+}
+
+// build/dev/javascript/everyday_meals/lucide_lustre.mjs
+function languages(attributes) {
+  return svg(
+    prepend(
+      attribute("stroke-linejoin", "round"),
+      prepend(
+        attribute("stroke-linecap", "round"),
+        prepend(
+          attribute("stroke-width", "2"),
+          prepend(
+            attribute("stroke", "currentColor"),
+            prepend(
+              attribute("fill", "none"),
+              prepend(
+                attribute("viewBox", "0 0 24 24"),
+                prepend(
+                  attribute("height", "24"),
+                  prepend(attribute("width", "24"), attributes)
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+    toList([
+      path(toList([attribute("d", "m5 8 6 6")])),
+      path(toList([attribute("d", "m4 14 6-6 2-3")])),
+      path(toList([attribute("d", "M2 5h12")])),
+      path(toList([attribute("d", "M7 2h1")])),
+      path(toList([attribute("d", "m22 22-5-10-5 10")])),
+      path(toList([attribute("d", "M14 18h6")]))
+    ])
+  );
 }
 
 // build/dev/javascript/everyday_meals/everyday_meals.mjs
@@ -2655,16 +2732,83 @@ var DeleteMeal = class extends CustomType {
     this[0] = x0;
   }
 };
+var MoveMealUp = class extends CustomType {
+  constructor(x0) {
+    super();
+    this[0] = x0;
+  }
+};
+var MoveMealDown = class extends CustomType {
+  constructor(x0) {
+    super();
+    this[0] = x0;
+  }
+};
+var ToggleLanguageDropdown = class extends CustomType {
+};
 var Model2 = class extends CustomType {
-  constructor(meals, new_meal, language) {
+  constructor(meals, new_meal, language, language_dropdown_open) {
     super();
     this.meals = meals;
     this.new_meal = new_meal;
     this.language = language;
+    this.language_dropdown_open = language_dropdown_open;
   }
 };
+var Up = class extends CustomType {
+};
+var Down = class extends CustomType {
+};
 function init2(_) {
-  return [new Model2(toList([]), "", new En()), none()];
+  return [new Model2(toList([]), "", new En(), false), none()];
+}
+function move_meal(meals, id, direction) {
+  let $ = fold_until(
+    meals,
+    [toList([]), meals],
+    (acc, meal) => {
+      let $1 = meal.id === id;
+      if ($1) {
+        return new Stop(acc);
+      } else {
+        return new Continue(
+          [prepend(meal, acc[0]), drop(acc[1], 1)]
+        );
+      }
+    }
+  );
+  let before = $[0];
+  let rest = $[1];
+  if (rest.hasLength(0)) {
+    return meals;
+  } else {
+    let meal = rest.head;
+    let after = rest.tail;
+    let before$1 = reverse(before);
+    if (direction instanceof Up) {
+      if (before$1.hasLength(0)) {
+        return meals;
+      } else {
+        let prev = before$1.head;
+        let earlier = before$1.tail;
+        return append(
+          earlier,
+          prepend(meal, prepend(prev, after))
+        );
+      }
+    } else {
+      if (after.hasLength(0)) {
+        return meals;
+      } else {
+        let next = after.head;
+        let later = after.tail;
+        return append(
+          before$1,
+          prepend(next, prepend(meal, later))
+        );
+      }
+    }
+  }
 }
 function update(loop$model, loop$msg) {
   while (true) {
@@ -2765,7 +2909,7 @@ function update(loop$model, loop$msg) {
       } else {
         return [model, none()];
       }
-    } else {
+    } else if (msg instanceof DeleteMeal) {
       let id = msg[0];
       let updated_meals = filter(
         model.meals,
@@ -2774,6 +2918,21 @@ function update(loop$model, loop$msg) {
         }
       );
       return [model.withFields({ meals: updated_meals }), none()];
+    } else if (msg instanceof MoveMealUp) {
+      let id = msg[0];
+      let updated_meals = move_meal(model.meals, id, new Up());
+      return [model.withFields({ meals: updated_meals }), none()];
+    } else if (msg instanceof MoveMealDown) {
+      let id = msg[0];
+      let updated_meals = move_meal(model.meals, id, new Down());
+      return [model.withFields({ meals: updated_meals }), none()];
+    } else {
+      return [
+        model.withFields({
+          language_dropdown_open: !model.language_dropdown_open
+        }),
+        none()
+      ];
     }
   }
 }
@@ -2784,10 +2943,10 @@ function get_translation(lang, key) {
     return "Add Meal";
   } else if (lang instanceof En && key === "enter_meal") {
     return "Enter a new meal";
-  } else if (lang instanceof En && key === "eaten") {
-    return "Eaten";
-  } else if (lang instanceof En && key === "uneaten") {
-    return "Uneaten";
+  } else if (lang instanceof En && key === "eat") {
+    return "Eat";
+  } else if (lang instanceof En && key === "plan") {
+    return "Plan";
   } else if (lang instanceof En && key === "eaten_meals") {
     return "Eaten Meals";
   } else if (lang instanceof En && key === "select_language") {
@@ -2798,10 +2957,10 @@ function get_translation(lang, key) {
     return "L\xE4gg till M\xE5ltid";
   } else if (lang instanceof Sv && key === "enter_meal") {
     return "Ange en ny m\xE5ltid";
-  } else if (lang instanceof Sv && key === "eaten") {
-    return "\xC4ten";
-  } else if (lang instanceof Sv && key === "uneaten") {
-    return "O\xE4ten";
+  } else if (lang instanceof Sv && key === "eat") {
+    return "\xC4t";
+  } else if (lang instanceof Sv && key === "plan") {
+    return "Planera";
   } else if (lang instanceof Sv && key === "eaten_meals") {
     return "\xC4tna M\xE5ltider";
   } else if (lang instanceof Sv && key === "select_language") {
@@ -2812,10 +2971,10 @@ function get_translation(lang, key) {
     return "Ajouter un Repas";
   } else if (lang instanceof Fr && key === "enter_meal") {
     return "Entrez un nouveau repas";
-  } else if (lang instanceof Fr && key === "eaten") {
-    return "Mang\xE9";
-  } else if (lang instanceof Fr && key === "uneaten") {
-    return "Non Mang\xE9";
+  } else if (lang instanceof Fr && key === "eat") {
+    return "Manger";
+  } else if (lang instanceof Fr && key === "plan") {
+    return "Pr\xE9voir";
   } else if (lang instanceof Fr && key === "eaten_meals") {
     return "Repas Mang\xE9s";
   } else if (lang instanceof Fr && key === "select_language") {
@@ -2824,42 +2983,58 @@ function get_translation(lang, key) {
     return "Translation missing";
   }
 }
-function language_switcher(current) {
-  return div(
-    toList([class$("absolute top-4 right-4")]),
+function view_language_option(label, lang, current) {
+  return button(
     toList([
-      select(
-        toList([
-          on_input(
-            (value3) => {
-              if (value3 === "en") {
-                return new SetLanguage(new En());
-              } else if (value3 === "sv") {
-                return new SetLanguage(new Sv());
-              } else if (value3 === "fr") {
-                return new SetLanguage(new Fr());
-              } else if (value3 === "de") {
-                return new SetLanguage(new De());
-              } else if (value3 === "it") {
-                return new SetLanguage(new It());
-              } else if (value3 === "nl") {
-                return new SetLanguage(new Nl());
-              } else {
-                return new SetLanguage(new En());
-              }
-            }
-          ),
-          class$("p-2 border rounded bg-white")
-        ]),
-        toList([
-          option(toList([value("en")]), "English"),
-          option(toList([value("sv")]), "Svenska"),
-          option(toList([value("fr")]), "Fran\xE7ais"),
-          option(toList([value("de")]), "Deutsch"),
-          option(toList([value("it")]), "Italiano"),
-          option(toList([value("nl")]), "Nederlands")
-        ])
+      on_click(new SetLanguage(lang)),
+      class$(
+        "block px-4 py-2 text-sm capitalize text-gray-700 hover:bg-gray-100 w-full text-left " + (() => {
+          let $ = isEqual(lang, current);
+          if ($) {
+            return "bg-gray-100";
+          } else {
+            return "";
+          }
+        })()
       )
+    ]),
+    toList([text(label)])
+  );
+}
+function view_language_switcher(model) {
+  return div(
+    toList([class$("fixed top-4 right-4")]),
+    toList([
+      button(
+        toList([
+          on_click(new ToggleLanguageDropdown()),
+          class$("p-2 text-gray-600 hover:text-blue-500"),
+          title("Select Language")
+        ]),
+        toList([languages(toList([]))])
+      ),
+      (() => {
+        let $ = model.language_dropdown_open;
+        if (!$) {
+          return none2();
+        } else {
+          return div(
+            toList([
+              class$(
+                "absolute right-0 mt-2 py-2 w-48 bg-white rounded-md shadow-xl z-20 border"
+              )
+            ]),
+            toList([
+              view_language_option("English", new En(), model.language),
+              view_language_option("Svenska", new Sv(), model.language),
+              view_language_option("Fran\xE7ais", new Fr(), model.language),
+              view_language_option("Deutsch", new De(), model.language),
+              view_language_option("Italiano", new It(), model.language),
+              view_language_option("Nederlands", new Nl(), model.language)
+            ])
+          );
+        }
+      })()
     ])
   );
 }
@@ -2867,7 +3042,7 @@ function format_date(timestamp) {
   let _pipe = toISOString(timestamp);
   return slice(_pipe, 0, 10);
 }
-function render_meal_item(meal, is_eaten, language) {
+function view_meal_item(meal, is_eaten, language) {
   return li(
     toList([class$("p-4 border rounded flex flex-col")]),
     toList([
@@ -2899,6 +3074,37 @@ function render_meal_item(meal, is_eaten, language) {
           div(
             toList([class$("flex items-center gap-2")]),
             toList([
+              (() => {
+                if (is_eaten) {
+                  return none2();
+                } else {
+                  return div(
+                    toList([class$("flex items-center gap-1")]),
+                    toList([
+                      button(
+                        toList([
+                          on_click(new MoveMealUp(meal.id)),
+                          class$(
+                            "p-1 text-gray-500 hover:text-blue-500"
+                          ),
+                          title("Move up")
+                        ]),
+                        toList([text("\u2B06\uFE0F")])
+                      ),
+                      button(
+                        toList([
+                          on_click(new MoveMealDown(meal.id)),
+                          class$(
+                            "p-1 text-gray-500 hover:text-blue-500"
+                          ),
+                          title("Move down")
+                        ]),
+                        toList([text("\u2B07\uFE0F")])
+                      )
+                    ])
+                  );
+                }
+              })(),
               button(
                 toList([
                   on_click(new ToggleEaten(meal.id)),
@@ -2918,9 +3124,9 @@ function render_meal_item(meal, is_eaten, language) {
                       language,
                       (() => {
                         if (is_eaten) {
-                          return "uneaten";
+                          return "plan";
                         } else {
-                          return "eaten";
+                          return "eat";
                         }
                       })()
                     )
@@ -2957,7 +3163,7 @@ function view(model) {
   return div(
     toList([class$("max-w-md mx-auto p-4 relative")]),
     toList([
-      language_switcher(model.language),
+      view_language_switcher(model),
       h1(
         toList([class$("text-2xl font-bold mb-4")]),
         toList([
@@ -2997,7 +3203,7 @@ function view(model) {
         map(
           uneaten_meals,
           (meal) => {
-            return render_meal_item(meal, false, model.language);
+            return view_meal_item(meal, false, model.language);
           }
         )
       ),
@@ -3019,7 +3225,7 @@ function view(model) {
                 map(
                   eaten_meals,
                   (meal) => {
-                    return render_meal_item(meal, true, model.language);
+                    return view_meal_item(meal, true, model.language);
                   }
                 )
               )
@@ -3037,7 +3243,7 @@ function main() {
     throw makeError(
       "let_assert",
       "everyday_meals",
-      315,
+      418,
       "main",
       "Pattern match failed, no pattern matched the value.",
       { value: $ }

@@ -3,6 +3,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
+import lucide_lustre as lucide
 import lustre
 import lustre/attribute
 import lustre/effect
@@ -31,14 +32,25 @@ pub type Msg {
   SetLanguage(Language)
   HandleKeyPress(String)
   DeleteMeal(String)
+  MoveMealUp(String)
+  MoveMealDown(String)
+  ToggleLanguageDropdown
 }
 
 pub type Model {
-  Model(meals: List(Meal), new_meal: String, language: Language)
+  Model(
+    meals: List(Meal),
+    new_meal: String,
+    language: Language,
+    language_dropdown_open: Bool,
+  )
 }
 
 fn init(_flags) -> #(Model, effect.Effect(Msg)) {
-  #(Model(meals: [], new_meal: "", language: En), effect.none())
+  #(
+    Model(meals: [], new_meal: "", language: En, language_dropdown_open: False),
+    effect.none(),
+  )
 }
 
 pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
@@ -128,6 +140,59 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       let updated_meals = list.filter(model.meals, fn(meal) { meal.id != id })
       #(Model(..model, meals: updated_meals), effect.none())
     }
+    MoveMealUp(id) -> {
+      let updated_meals = move_meal(model.meals, id, Up)
+      #(Model(..model, meals: updated_meals), effect.none())
+    }
+    MoveMealDown(id) -> {
+      let updated_meals = move_meal(model.meals, id, Down)
+      #(Model(..model, meals: updated_meals), effect.none())
+    }
+    ToggleLanguageDropdown -> #(
+      Model(..model, language_dropdown_open: !model.language_dropdown_open),
+      effect.none(),
+    )
+  }
+}
+
+type Direction {
+  Up
+  Down
+}
+
+// Helper function to move a meal up or down
+fn move_meal(meals: List(Meal), id: String, direction: Direction) -> List(Meal) {
+  // Find the meal and its index
+  let #(before, rest) =
+    list.fold_until(meals, #([], meals), fn(acc, meal) {
+      case meal.id == id {
+        True -> list.Stop(acc)
+        False -> list.Continue(#([meal, ..acc.0], list.drop(acc.1, 1)))
+      }
+    })
+
+  case rest {
+    [] -> meals
+    // Meal not found
+    [meal, ..after] -> {
+      let before = list.reverse(before)
+      case direction {
+        // Moving up
+        Up ->
+          case before {
+            [] -> meals
+            // Already at top
+            [prev, ..earlier] -> list.append(earlier, [meal, prev, ..after])
+          }
+        // Moving down
+        Down ->
+          case after {
+            [] -> meals
+            // Already at bottom
+            [next, ..later] -> list.append(before, [next, meal, ..later])
+          }
+      }
+    }
   }
 }
 
@@ -136,24 +201,24 @@ fn get_translation(lang: Language, key: String) -> String {
     En, "title" -> "Weekly Meal Tracker"
     En, "add_meal" -> "Add Meal"
     En, "enter_meal" -> "Enter a new meal"
-    En, "eaten" -> "Eaten"
-    En, "uneaten" -> "Uneaten"
+    En, "eat" -> "Eat"
+    En, "plan" -> "Plan"
     En, "eaten_meals" -> "Eaten Meals"
     En, "select_language" -> "Select Language"
 
     Sv, "title" -> "Veckans Måltidsspårare"
     Sv, "add_meal" -> "Lägg till Måltid"
     Sv, "enter_meal" -> "Ange en ny måltid"
-    Sv, "eaten" -> "Äten"
-    Sv, "uneaten" -> "Oäten"
+    Sv, "eat" -> "Ät"
+    Sv, "plan" -> "Planera"
     Sv, "eaten_meals" -> "Ätna Måltider"
     Sv, "select_language" -> "Välj Språk"
 
     Fr, "title" -> "Suivi des Repas Hebdomadaires"
     Fr, "add_meal" -> "Ajouter un Repas"
     Fr, "enter_meal" -> "Entrez un nouveau repas"
-    Fr, "eaten" -> "Mangé"
-    Fr, "uneaten" -> "Non Mangé"
+    Fr, "eat" -> "Manger"
+    Fr, "plan" -> "Prévoir"
     Fr, "eaten_meals" -> "Repas Mangés"
     Fr, "select_language" -> "Choisir la Langue"
 
@@ -162,51 +227,66 @@ fn get_translation(lang: Language, key: String) -> String {
   }
 }
 
-fn language_name(lang: Language) -> String {
-  case lang {
-    En -> "English"
-    Sv -> "Svenska"
-    Fr -> "Français"
-    De -> "Deutsch"
-    It -> "Italiano"
-    Nl -> "Nederlands"
-  }
+fn view_language_switcher(model: Model) -> element.Element(Msg) {
+  html.div([attribute.class("fixed top-4 right-4")], [
+    // Language icon button
+    html.button(
+      [
+        event.on_click(ToggleLanguageDropdown),
+        attribute.class("p-2 text-gray-600 hover:text-blue-500"),
+        attribute.title("Select Language"),
+      ],
+      [lucide.languages([])],
+    ),
+    // Dropdown menu
+    case model.language_dropdown_open {
+      False -> element.none()
+      True ->
+        html.div(
+          [
+            attribute.class(
+              "absolute right-0 mt-2 py-2 w-48 bg-white rounded-md shadow-xl z-20 border",
+            ),
+          ],
+          [
+            view_language_option("English", En, model.language),
+            view_language_option("Svenska", Sv, model.language),
+            view_language_option("Français", Fr, model.language),
+            view_language_option("Deutsch", De, model.language),
+            view_language_option("Italiano", It, model.language),
+            view_language_option("Nederlands", Nl, model.language),
+          ],
+        )
+    },
+  ])
 }
 
-fn language_switcher(current: Language) -> element.Element(Msg) {
-  html.div([attribute.class("absolute top-4 right-4")], [
-    html.select(
-      [
-        event.on_input(fn(value) {
-          case value {
-            "en" -> SetLanguage(En)
-            "sv" -> SetLanguage(Sv)
-            "fr" -> SetLanguage(Fr)
-            "de" -> SetLanguage(De)
-            "it" -> SetLanguage(It)
-            "nl" -> SetLanguage(Nl)
-            _ -> SetLanguage(En)
-          }
-        }),
-        attribute.class("p-2 border rounded bg-white"),
-      ],
-      [
-        html.option([attribute.value("en")], "English"),
-        html.option([attribute.value("sv")], "Svenska"),
-        html.option([attribute.value("fr")], "Français"),
-        html.option([attribute.value("de")], "Deutsch"),
-        html.option([attribute.value("it")], "Italiano"),
-        html.option([attribute.value("nl")], "Nederlands"),
-      ],
-    ),
-  ])
+// Helper function to create language options
+fn view_language_option(
+  label: String,
+  lang: Language,
+  current: Language,
+) -> element.Element(Msg) {
+  html.button(
+    [
+      event.on_click(SetLanguage(lang)),
+      attribute.class(
+        "block px-4 py-2 text-sm capitalize text-gray-700 hover:bg-gray-100 w-full text-left "
+        <> case lang == current {
+          True -> "bg-gray-100"
+          False -> ""
+        },
+      ),
+    ],
+    [element.text(label)],
+  )
 }
 
 fn format_date(timestamp: date.Date) -> String {
   date.to_iso_string(timestamp) |> string.slice(0, 10)
 }
 
-fn render_meal_item(
+fn view_meal_item(
   meal: Meal,
   is_eaten: Bool,
   language: Language,
@@ -223,6 +303,29 @@ fn render_meal_item(
         ]),
       ]),
       html.div([attribute.class("flex items-center gap-2")], [
+        // Only show reorder buttons for planned meals
+        case is_eaten {
+          True -> element.none()
+          False ->
+            html.div([attribute.class("flex items-center gap-1")], [
+              html.button(
+                [
+                  event.on_click(MoveMealUp(meal.id)),
+                  attribute.class("p-1 text-gray-500 hover:text-blue-500"),
+                  attribute.title("Move up"),
+                ],
+                [element.text("⬆️")],
+              ),
+              html.button(
+                [
+                  event.on_click(MoveMealDown(meal.id)),
+                  attribute.class("p-1 text-gray-500 hover:text-blue-500"),
+                  attribute.title("Move down"),
+                ],
+                [element.text("⬇️")],
+              ),
+            ])
+        },
         html.button(
           [
             event.on_click(ToggleEaten(meal.id)),
@@ -234,8 +337,8 @@ fn render_meal_item(
           [
             element.text(
               get_translation(language, case is_eaten {
-                True -> "uneaten"
-                False -> "eaten"
+                True -> "plan"
+                False -> "eat"
               }),
             ),
           ],
@@ -261,7 +364,7 @@ pub fn view(model: Model) -> element.Element(Msg) {
   let eaten_meals = list.filter(model.meals, fn(m) { m.eaten })
 
   html.div([attribute.class("max-w-md mx-auto p-4 relative")], [
-    language_switcher(model.language),
+    view_language_switcher(model),
     html.h1([attribute.class("text-2xl font-bold mb-4")], [
       element.text("🥘 " <> get_translation(model.language, "title")),
     ]),
@@ -288,7 +391,7 @@ pub fn view(model: Model) -> element.Element(Msg) {
     html.ul(
       [attribute.class("space-y-2")],
       list.map(uneaten_meals, fn(meal) {
-        render_meal_item(meal, False, model.language)
+        view_meal_item(meal, False, model.language)
       }),
     ),
     // Eaten meals section
@@ -302,7 +405,7 @@ pub fn view(model: Model) -> element.Element(Msg) {
           html.ul(
             [attribute.class("space-y-2")],
             list.map(eaten_meals, fn(meal) {
-              render_meal_item(meal, True, model.language)
+              view_meal_item(meal, True, model.language)
             }),
           ),
         ])
