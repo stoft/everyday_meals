@@ -6,6 +6,7 @@
 - [ ] Add a "Buy me a coffee" button
 - [ ] Add sync to CouchBase
 - [ ] Convert to a PWA
+- [ ] add feedback button
 
 ### DOING
 
