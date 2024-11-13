@@ -4,6 +4,7 @@
 - Add an optional season/category to the meals
 - Add humanise date
 - Convert to a PWA
+- Add feedback button
 
 ### DOING
 
