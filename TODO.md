@@ -1,7 +1,8 @@
 ### TODO
 
-- Add an optional season/category to the meals
 - Add a "Buy me a coffee" button
+- Add an optional season/category to the meals
+- Add humanise date
 - Convert to a PWA
 
 ### DOING
