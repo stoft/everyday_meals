@@ -1,7 +1,13 @@
+import birl
+import decode/zero as decode
 import gleam/dynamic
 import gleam/int
+import gleam/io
+import gleam/javascript/promise
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/string
 import lucide_lustre as lucide
 import lustre
@@ -10,7 +16,7 @@ import lustre/effect
 import lustre/element
 import lustre/element/html
 import lustre/event
-import plinth/javascript/date
+import rxdb
 
 pub type Language {
   En
@@ -22,10 +28,10 @@ pub type Language {
 }
 
 pub type Meal {
-  Meal(id: String, name: String, eaten: Bool, last_eaten: Option(date.Date))
+  Meal(id: String, name: String, eaten: Bool, last_eaten: Option(birl.Time))
 }
 
-pub type Msg {
+type Msg {
   AddMeal(String)
   UpdateNewMeal(String)
   ToggleEaten(String)
@@ -35,6 +41,10 @@ pub type Msg {
   MoveMealUp(String)
   MoveMealDown(String)
   ToggleLanguageDropdown
+  DatabaseCreated(Result(rxdb.Database, String))
+  CollectionCreated(Result(rxdb.Collection, String))
+  StateLoaded(Result(PersistedModel, String))
+  StateSaved(Result(Nil, String))
 }
 
 pub type Model {
@@ -43,42 +53,253 @@ pub type Model {
     new_meal: String,
     language: Language,
     language_dropdown_open: Bool,
+    db: Option(rxdb.Database),
+    collection: Option(rxdb.Collection),
   )
+}
+
+type PersistedModel {
+  PersistedModel(meals: List(Meal), language: Language)
+}
+
+const schema = "{
+  \"version\": 0,
+  \"primaryKey\": \"id\",
+  \"type\": \"object\",
+  \"properties\": {
+    \"id\": {
+      \"type\": \"string\",
+      \"maxLength\": 100
+    },
+    \"meals\": {
+      \"type\": \"array\",
+      \"items\": {
+        \"type\": \"object\",
+        \"properties\": {
+          \"id\": { \"type\": \"string\" },
+          \"name\": { \"type\": \"string\" },
+          \"eaten\": { \"type\": \"boolean\" },
+          \"lastEaten\": { \"type\": \"number\", \"optional\": true }
+        }
+      }
+    },
+    \"language\": { \"type\": \"string\" }
+  }
+}"
+
+// Add encoding functions
+fn encode_meal(meal: Meal) -> json.Json {
+  json.object([
+    #("id", json.string(meal.id)),
+    #("name", json.string(meal.name)),
+    #("eaten", json.bool(meal.eaten)),
+    #("last_eaten", case meal.last_eaten {
+      Some(time) -> json.int(birl.to_unix(time))
+      None -> json.null()
+    }),
+  ])
+}
+
+fn encode_language(lang: Language) -> json.Json {
+  json.string(case lang {
+    En -> "en"
+    Sv -> "sv"
+    Fr -> "fr"
+    De -> "de"
+    It -> "it"
+    Nl -> "nl"
+  })
+}
+
+fn init_database() -> effect.Effect(Msg) {
+  effect.from(fn(callback) {
+    let _promise = {
+      rxdb.create_database("everyday_meals")
+      |> promise.map(fn(db) { callback(Ok(db)) })
+      |> promise.rescue(fn(error) { callback(Error(string.inspect(error))) })
+    }
+    Nil
+  })
+  |> effect.map(DatabaseCreated)
+}
+
+fn init_collection(db: rxdb.Database) -> effect.Effect(Msg) {
+  effect.from(fn(callback) {
+    let _promise = {
+      rxdb.create_collection(db, "state", schema)
+      |> promise.map(fn(collection) { callback(Ok(collection)) })
+      |> promise.rescue(fn(error) { callback(Error(string.inspect(error))) })
+    }
+    Nil
+  })
+  |> effect.map(CollectionCreated)
+}
+
+fn read_state(collection: rxdb.Collection) -> effect.Effect(Msg) {
+  effect.from(fn(callback) {
+    let _promise =
+      rxdb.find_one(collection, "current")
+      |> promise.map(fn(state) {
+        let result = decode.run(dynamic.from(state), decode_state())
+        case result {
+          Ok(state) -> {
+            // Parse the state and update the model
+            callback(Ok(state))
+          }
+          Error(_) -> callback(Error(string.inspect(result)))
+        }
+      })
+      |> promise.rescue(fn(error) { callback(Error(string.inspect(error))) })
+    Nil
+  })
+  |> effect.map(StateLoaded)
+}
+
+fn decode_meal() -> decode.Decoder(Meal) {
+  use id <- decode.field("id", decode.string)
+  use name <- decode.field("name", decode.string)
+  use eaten <- decode.field("eaten", decode.bool)
+  use last_eaten <- decode.field(
+    "last_eaten",
+    decode.optional(
+      decode.int
+      |> decode.then(fn(t) { decode.success(birl.from_unix(t)) }),
+    ),
+  )
+
+  decode.success(Meal(id: id, name: name, eaten: eaten, last_eaten: last_eaten))
+}
+
+fn decode_language() -> decode.Decoder(Language) {
+  decode.string
+  |> decode.then(fn(str) {
+    case str {
+      "en" -> decode.success(En)
+      "sv" -> decode.success(Sv)
+      _ -> decode.failure(En, "Language not supported")
+    }
+  })
+}
+
+fn decode_state() -> decode.Decoder(PersistedModel) {
+  use meals <- decode.field("meals", decode.list(decode_meal()))
+  use lang <- decode.field("language", decode_language())
+  decode.success(PersistedModel(meals: meals, language: lang))
+}
+
+fn save_state(model: Model) -> effect.Effect(Msg) {
+  io.debug("save_state")
+  case model.collection {
+    None -> effect.none()
+    Some(collection) -> {
+      io.debug("save_state: collection")
+      let state =
+        json.object([
+          #("id", json.string("current")),
+          #("meals", json.array(model.meals, encode_meal)),
+          #("language", encode_language(model.language)),
+        ])
+        |> json.to_string
+
+      effect.from(fn(callback) {
+        let _promise = {
+          rxdb.upsert(collection, state)
+          |> promise.map(fn(_) { callback(Ok(Nil)) })
+          |> promise.rescue(fn(error) {
+            io.debug("save_state: error")
+            io.debug(string.inspect(error))
+            callback(Error(string.inspect(error)))
+          })
+        }
+        Nil
+      })
+      |> effect.map(StateSaved)
+    }
+  }
 }
 
 fn init(_flags) -> #(Model, effect.Effect(Msg)) {
   #(
-    Model(meals: [], new_meal: "", language: En, language_dropdown_open: False),
-    effect.none(),
+    Model(
+      meals: [],
+      new_meal: "",
+      language: En,
+      language_dropdown_open: False,
+      db: None,
+      collection: None,
+    ),
+    init_database(),
   )
 }
 
-pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
+fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   case msg {
+    DatabaseCreated(Ok(db)) -> #(
+      Model(..model, db: Some(db)),
+      init_collection(db),
+    )
+    DatabaseCreated(Error(error)) -> {
+      // Log error or handle it appropriately
+      #(model, effect.none())
+    }
+
+    CollectionCreated(Ok(collection)) -> #(
+      Model(..model, collection: Some(collection)),
+      read_state(collection),
+    )
+    CollectionCreated(Error(error)) -> {
+      // Log error or handle it appropriately
+      io.debug(error)
+      #(model, effect.none())
+    }
+
+    StateLoaded(Ok(PersistedModel(meals, language))) -> {
+      io.debug("StateLoaded: Ok")
+      io.debug(string.inspect(meals))
+      #(Model(..model, meals: meals, language: language), effect.none())
+    }
+
+    StateLoaded(Error(error)) -> {
+      // Log error or handle it appropriately
+      io.debug(error)
+      #(model, effect.none())
+    }
+
+    StateSaved(Ok(Nil)) -> {
+      io.debug("StateSaved: Ok")
+      #(model, effect.none())
+    }
+
+    StateSaved(Error(error)) -> {
+      // Log error or handle it appropriately
+      io.debug(error)
+      #(model, effect.none())
+    }
+
     AddMeal(name) ->
       case string.trim(name) {
         "" -> #(model, effect.none())
         _ -> {
           let new_meal =
             Meal(
-              id: string.inspect(date.now()),
+              id: string.inspect(birl.to_unix(birl.now())),
               name: name,
               eaten: False,
               last_eaten: None,
             )
-          #(
+          let new_model =
             Model(
               ..model,
               meals: list.append(model.meals, [new_meal]),
               new_meal: "",
-            ),
-            effect.none(),
-          )
+            )
+
+          #(new_model, save_state(new_model))
         }
       }
     UpdateNewMeal(value) -> #(Model(..model, new_meal: value), effect.none())
     ToggleEaten(id) -> {
-      let current_time = date.now()
+      let current_time = birl.now()
       let updated_meals =
         list.map(model.meals, fn(meal) {
           case meal.id == id {
@@ -102,7 +323,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
 
       // If less than 7 uneaten meals, convert some eaten meals
       case uneaten_count < 7 {
-        False -> #(Model(..model, meals: updated_meals), effect.none())
+        False -> #(Model(..model, meals: updated_meals), save_state(model))
         True -> {
           let meals_to_convert = 7 - uneaten_count
 
@@ -126,7 +347,7 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
             list.append(uneaten, converted)
             |> list.append(remaining_eaten)
 
-          #(Model(..model, meals: final_meals), effect.none())
+          #(Model(..model, meals: final_meals), save_state(model))
         }
       }
     }
@@ -138,15 +359,18 @@ pub fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       }
     DeleteMeal(id) -> {
       let updated_meals = list.filter(model.meals, fn(meal) { meal.id != id })
-      #(Model(..model, meals: updated_meals), effect.none())
+      let new_model = Model(..model, meals: updated_meals)
+      #(new_model, save_state(new_model))
     }
     MoveMealUp(id) -> {
       let updated_meals = move_meal(model.meals, id, Up)
-      #(Model(..model, meals: updated_meals), effect.none())
+      let new_model = Model(..model, meals: updated_meals)
+      #(new_model, save_state(new_model))
     }
     MoveMealDown(id) -> {
       let updated_meals = move_meal(model.meals, id, Down)
-      #(Model(..model, meals: updated_meals), effect.none())
+      let new_model = Model(..model, meals: updated_meals)
+      #(new_model, save_state(new_model))
     }
     ToggleLanguageDropdown -> #(
       Model(..model, language_dropdown_open: !model.language_dropdown_open),
@@ -282,8 +506,8 @@ fn view_language_option(
   )
 }
 
-fn format_date(timestamp: date.Date) -> String {
-  date.to_iso_string(timestamp) |> string.slice(0, 10)
+fn format_date(time: birl.Time) -> String {
+  birl.to_naive_date_string(time)
 }
 
 fn view_meal_item(
@@ -297,7 +521,7 @@ fn view_meal_item(
         element.text(meal.name),
         html.span([attribute.class("text-sm text-gray-500")], [
           element.text(case meal.last_eaten {
-            Some(timestamp) -> format_date(timestamp)
+            Some(time) -> format_date(time)
             None -> "Never eaten"
           }),
         ]),
@@ -359,7 +583,7 @@ fn view_meal_item(
   ])
 }
 
-pub fn view(model: Model) -> element.Element(Msg) {
+fn view(model: Model) -> element.Element(Msg) {
   let uneaten_meals = list.filter(model.meals, fn(m) { !m.eaten })
   let eaten_meals = list.filter(model.meals, fn(m) { m.eaten })
 
@@ -414,8 +638,21 @@ pub fn view(model: Model) -> element.Element(Msg) {
 }
 
 pub fn main() {
+  let init = fn(_) {
+    #(
+      Model(
+        meals: [],
+        new_meal: "",
+        language: En,
+        language_dropdown_open: False,
+        db: None,
+        collection: None,
+      ),
+      init_database(),
+    )
+  }
+
   let app = lustre.application(init, update, view)
   let assert Ok(_) = lustre.start(app, "#app", Nil)
-
   Nil
 }
