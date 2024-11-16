@@ -45,6 +45,7 @@ type Msg {
   CollectionCreated(Result(rxdb.Collection, String))
   StateLoaded(Result(PersistedModel, String))
   StateSaved(Result(Nil, String))
+  CloseLanguageDropdown
 }
 
 pub type Model {
@@ -351,7 +352,10 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
         }
       }
     }
-    SetLanguage(lang) -> #(Model(..model, language: lang), effect.none())
+    SetLanguage(lang) -> #(
+      Model(..model, language: lang, language_dropdown_open: False),
+      effect.none(),
+    )
     HandleKeyPress(key) ->
       case key {
         "Enter" -> update(model, AddMeal(model.new_meal))
@@ -374,6 +378,10 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
     }
     ToggleLanguageDropdown -> #(
       Model(..model, language_dropdown_open: !model.language_dropdown_open),
+      effect.none(),
+    )
+    CloseLanguageDropdown -> #(
+      Model(..model, language_dropdown_open: False),
       effect.none(),
     )
   }
@@ -422,7 +430,7 @@ fn move_meal(meals: List(Meal), id: String, direction: Direction) -> List(Meal) 
 
 fn get_translation(lang: Language, key: String) -> String {
   case lang, key {
-    En, "title" -> "Weekly Meal Tracker"
+    En, "title" -> "Everyday Meals"
     En, "add_meal" -> "Add Meal"
     En, "enter_meal" -> "Enter a new meal"
     En, "eat" -> "Eat"
@@ -430,7 +438,7 @@ fn get_translation(lang: Language, key: String) -> String {
     En, "eaten_meals" -> "Eaten Meals"
     En, "select_language" -> "Select Language"
 
-    Sv, "title" -> "Veckans Måltidsspårare"
+    Sv, "title" -> "Var dags mat"
     Sv, "add_meal" -> "Lägg till Måltid"
     Sv, "enter_meal" -> "Ange en ny måltid"
     Sv, "eat" -> "Ät"
@@ -452,7 +460,18 @@ fn get_translation(lang: Language, key: String) -> String {
 }
 
 fn view_language_switcher(model: Model) -> element.Element(Msg) {
-  html.div([attribute.class("fixed top-4 right-4")], [
+  html.div([attribute.class("fixed top-4 right-4 z-20")], [
+    case model.language_dropdown_open {
+      True ->
+        html.div(
+          [
+            attribute.class("fixed inset-0 z-10"),
+            event.on_click(CloseLanguageDropdown),
+          ],
+          [],
+        )
+      False -> element.none()
+    },
     // Language icon button
     html.button(
       [

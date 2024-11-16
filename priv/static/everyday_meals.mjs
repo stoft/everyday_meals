@@ -20929,6 +20929,8 @@ var StateSaved = class extends CustomType {
     this[0] = x0;
   }
 };
+var CloseLanguageDropdown = class extends CustomType {
+};
 var Model2 = class extends CustomType {
   constructor(meals, new_meal, language, language_dropdown_open, db, collection) {
     super();
@@ -21209,7 +21211,7 @@ function move_meal(meals, id, direction) {
 }
 function get_translation(lang, key) {
   if (lang instanceof En && key === "title") {
-    return "Weekly Meal Tracker";
+    return "Everyday Meals";
   } else if (lang instanceof En && key === "add_meal") {
     return "Add Meal";
   } else if (lang instanceof En && key === "enter_meal") {
@@ -21223,7 +21225,7 @@ function get_translation(lang, key) {
   } else if (lang instanceof En && key === "select_language") {
     return "Select Language";
   } else if (lang instanceof Sv && key === "title") {
-    return "Veckans M\xE5ltidssp\xE5rare";
+    return "Var dags mat";
   } else if (lang instanceof Sv && key === "add_meal") {
     return "L\xE4gg till M\xE5ltid";
   } else if (lang instanceof Sv && key === "enter_meal") {
@@ -21274,8 +21276,22 @@ function view_language_option(label, lang, current) {
 }
 function view_language_switcher(model) {
   return div(
-    toList([class$("fixed top-4 right-4")]),
+    toList([class$("fixed top-4 right-4 z-20")]),
     toList([
+      (() => {
+        let $ = model.language_dropdown_open;
+        if ($) {
+          return div(
+            toList([
+              class$("fixed inset-0 z-10"),
+              on_click(new CloseLanguageDropdown())
+            ]),
+            toList([])
+          );
+        } else {
+          return none2();
+        }
+      })(),
       button(
         toList([
           on_click(new ToggleLanguageDropdown()),
@@ -21656,7 +21672,10 @@ function update(loop$model, loop$msg) {
       }
     } else if (msg instanceof SetLanguage) {
       let lang = msg[0];
-      return [model.withFields({ language: lang }), none()];
+      return [
+        model.withFields({ language: lang, language_dropdown_open: false }),
+        none()
+      ];
     } else if (msg instanceof HandleKeyPress) {
       let key = msg[0];
       if (key === "Enter") {
@@ -21685,11 +21704,16 @@ function update(loop$model, loop$msg) {
       let updated_meals = move_meal(model.meals, id, new Down());
       let new_model = model.withFields({ meals: updated_meals });
       return [new_model, save_state(new_model)];
-    } else {
+    } else if (msg instanceof ToggleLanguageDropdown) {
       return [
         model.withFields({
           language_dropdown_open: !model.language_dropdown_open
         }),
+        none()
+      ];
+    } else {
+      return [
+        model.withFields({ language_dropdown_open: false }),
         none()
       ];
     }
@@ -21708,7 +21732,7 @@ function main() {
     throw makeError(
       "let_assert",
       "everyday_meals",
-      656,
+      675,
       "main",
       "Pattern match failed, no pattern matched the value.",
       { value: $ }
