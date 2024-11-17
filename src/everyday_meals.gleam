@@ -1,4 +1,5 @@
 import birl
+import birl/duration
 import decode/zero as decode
 import gleam/dynamic
 import gleam/int
@@ -534,13 +535,28 @@ fn format_date(time: birl.Time) -> String {
 
 fn view_meal_item(
   meal: Meal,
+  index: Int,
   is_eaten: Bool,
   language: Language,
 ) -> element.Element(Msg) {
-  html.li([attribute.class("p-2 border rounded flex flex-col")], [
+  let day_text = case index {
+    0 -> "Today"
+    n -> {
+      let today = birl.now()
+      let future_date = birl.add(today, duration.days(n))
+      birl.weekday(future_date) |> birl.weekday_to_short_string
+    }
+  }
+
+  html.li([attribute.class("p-2 border rounded")], [
     html.div([attribute.class("flex justify-between items-center w-full")], [
       html.div([attribute.class("flex flex-col gap-0")], [
-        element.text(meal.name),
+        html.div([attribute.class("flex items-center gap-2")], [
+          element.text(meal.name),
+          html.span([attribute.class("text-xs text-gray-400")], [
+            element.text(day_text),
+          ]),
+        ]),
         html.span([attribute.class("text-xs text-gray-500")], [
           element.text(case meal.last_eaten {
             Some(time) -> format_date(time)
@@ -605,6 +621,20 @@ fn view_meal_item(
   ])
 }
 
+// Update the view_meals function to pass the index
+fn view_meals(
+  meals: List(Meal),
+  is_eaten: Bool,
+  language: Language,
+) -> element.Element(Msg) {
+  html.ul(
+    [attribute.class("space-y-2")],
+    list.index_map(meals, fn(meal, index) {
+      view_meal_item(meal, index, is_eaten, language)
+    }),
+  )
+}
+
 fn view(model: Model) -> element.Element(Msg) {
   let uneaten_meals = list.filter(model.meals, fn(m) { !m.eaten })
   let eaten_meals = list.filter(model.meals, fn(m) { m.eaten })
@@ -650,12 +680,7 @@ fn view(model: Model) -> element.Element(Msg) {
         ),
       ]),
       // Uneaten meals list
-      html.ul(
-        [attribute.class("space-y-2")],
-        list.map(uneaten_meals, fn(meal) {
-          view_meal_item(meal, False, model.language)
-        }),
-      ),
+      view_meals(uneaten_meals, False, model.language),
       // Eaten meals section
       case eaten_meals {
         [] -> element.none()
@@ -664,12 +689,7 @@ fn view(model: Model) -> element.Element(Msg) {
             html.h2([attribute.class("text-lg font-semibold mt-6 mb-2")], [
               element.text(get_translation(model.language, "eaten_meals")),
             ]),
-            html.ul(
-              [attribute.class("space-y-2")],
-              list.map(eaten_meals, fn(meal) {
-                view_meal_item(meal, True, model.language)
-              }),
-            ),
+            view_meals(eaten_meals, True, model.language),
           ])
       },
     ]),

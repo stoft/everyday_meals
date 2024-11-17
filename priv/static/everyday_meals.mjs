@@ -1674,12 +1674,12 @@ var require_dexie = __commonJS({
             return evs[eventName];
           }
         };
-        rv.addEventType = add4;
+        rv.addEventType = add5;
         for (var i = 1, l = arguments.length; i < l; ++i) {
-          add4(arguments[i]);
+          add5(arguments[i]);
         }
         return rv;
-        function add4(eventName, chainFunction, defaultFunction) {
+        function add5(eventName, chainFunction, defaultFunction) {
           if (typeof eventName === "object")
             return addConfiguredEvents(eventName);
           if (!chainFunction)
@@ -1709,9 +1709,9 @@ var require_dexie = __commonJS({
           keys2(cfg).forEach(function(eventName) {
             var args = cfg[eventName];
             if (isArray3(args)) {
-              add4(eventName, cfg[eventName][0], cfg[eventName][1]);
+              add5(eventName, cfg[eventName][0], cfg[eventName][1]);
             } else if (args === "asap") {
-              var context2 = add4(eventName, mirror, function fire() {
+              var context2 = add5(eventName, mirror, function fire() {
                 var i2 = arguments.length, args2 = new Array(i2);
                 while (i2--)
                   args2[i2] = arguments[i2];
@@ -5928,7 +5928,7 @@ var require_dexie = __commonJS({
           }
         });
       }
-      function add3(value3) {
+      function add4(value3) {
         return new PropModification2({ add: value3 });
       }
       function remove2(value3) {
@@ -5948,7 +5948,7 @@ var require_dexie = __commonJS({
         PropModSymbol: PropModSymbol2,
         PropModification: PropModification2,
         replacePrefix: replacePrefix2,
-        add: add3,
+        add: add4,
         remove: remove2,
         "default": Dexie$1,
         RangeSet: RangeSet2,
@@ -6407,6 +6407,28 @@ function do_map(loop$list, loop$fun, loop$acc) {
 }
 function map2(list4, fun) {
   return do_map(list4, fun, toList([]));
+}
+function do_index_map(loop$list, loop$fun, loop$index, loop$acc) {
+  while (true) {
+    let list4 = loop$list;
+    let fun = loop$fun;
+    let index5 = loop$index;
+    let acc = loop$acc;
+    if (list4.hasLength(0)) {
+      return reverse(acc);
+    } else {
+      let first$1 = list4.head;
+      let rest$1 = list4.tail;
+      let acc$1 = prepend(fun(first$1, index5), acc);
+      loop$list = rest$1;
+      loop$fun = fun;
+      loop$index = index5 + 1;
+      loop$acc = acc$1;
+    }
+  }
+}
+function index_map(list4, fun) {
+  return do_index_map(list4, fun, 0, toList([]));
 }
 function drop(loop$list, loop$n) {
   while (true) {
@@ -7831,6 +7853,9 @@ var second = 1e6;
 var minute = 6e7;
 var hour = 36e8;
 var day = 864e8;
+function days(value3) {
+  return new Duration(value3 * day);
+}
 var week = 6048e8;
 var month = 2592e9;
 var year = 31536e9;
@@ -8307,6 +8332,10 @@ function to_parts(timestamp, offset) {
     ]
   ];
 }
+function weekday(timestamp, offset) {
+  const date = new Date((timestamp + offset) / 1e3);
+  return date.getUTCDay();
+}
 
 // build/dev/javascript/birl/birl.mjs
 var Time = class extends CustomType {
@@ -8318,6 +8347,20 @@ var Time = class extends CustomType {
     this.monotonic_time = monotonic_time;
   }
 };
+var Mon = class extends CustomType {
+};
+var Tue = class extends CustomType {
+};
+var Wed = class extends CustomType {
+};
+var Thu = class extends CustomType {
+};
+var Fri = class extends CustomType {
+};
+var Sat = class extends CustomType {
+};
+var Sun = class extends CustomType {
+};
 function to_unix(value3) {
   {
     let t = value3.wall_time;
@@ -8326,6 +8369,41 @@ function to_unix(value3) {
 }
 function from_unix(value3) {
   return new Time(value3 * 1e6, 0, new None(), new None());
+}
+function add2(value3, duration) {
+  let wt = value3.wall_time;
+  let o = value3.offset;
+  let timezone = value3.timezone;
+  let mt = value3.monotonic_time;
+  let duration$1 = duration[0];
+  if (mt instanceof Some) {
+    let mt$1 = mt[0];
+    return new Time(
+      wt + duration$1,
+      o,
+      timezone,
+      new Some(mt$1 + duration$1)
+    );
+  } else {
+    return new Time(wt + duration$1, o, timezone, new None());
+  }
+}
+function weekday_to_short_string(value3) {
+  if (value3 instanceof Mon) {
+    return "Mon";
+  } else if (value3 instanceof Tue) {
+    return "Tue";
+  } else if (value3 instanceof Wed) {
+    return "Wed";
+  } else if (value3 instanceof Thu) {
+    return "Thu";
+  } else if (value3 instanceof Fri) {
+    return "Fri";
+  } else if (value3 instanceof Sat) {
+    return "Sat";
+  } else {
+    return "Sun";
+  }
 }
 function generate_offset(offset) {
   return guard(
@@ -8417,6 +8495,25 @@ function generate_offset(offset) {
     }
   );
 }
+function weekday_from_int(weekday3) {
+  if (weekday3 === 0) {
+    return new Ok(new Sun());
+  } else if (weekday3 === 1) {
+    return new Ok(new Mon());
+  } else if (weekday3 === 2) {
+    return new Ok(new Tue());
+  } else if (weekday3 === 3) {
+    return new Ok(new Wed());
+  } else if (weekday3 === 4) {
+    return new Ok(new Thu());
+  } else if (weekday3 === 5) {
+    return new Ok(new Fri());
+  } else if (weekday3 === 6) {
+    return new Ok(new Sat());
+  } else {
+    return new Error2(void 0);
+  }
+}
 function to_parts2(value3) {
   {
     let t = value3.wall_time;
@@ -8453,6 +8550,25 @@ function to_naive_date_string(value3) {
     let _pipe$1 = to_string2(_pipe);
     return pad_left(_pipe$1, 2, "0");
   })();
+}
+function weekday2(value3) {
+  {
+    let t = value3.wall_time;
+    let o = value3.offset;
+    let $ = weekday_from_int(weekday(t, o));
+    if (!$.isOk()) {
+      throw makeError(
+        "let_assert",
+        "birl",
+        1033,
+        "weekday",
+        "Pattern match failed, no pattern matched the value.",
+        { value: $ }
+      );
+    }
+    let weekday$1 = $[0];
+    return weekday$1;
+  }
 }
 function now2() {
   let now$1 = now();
@@ -9876,15 +9992,15 @@ function countUntilNotMatching(ar, matchingFn) {
   }
   return count;
 }
-function appendToArray(ar, add3) {
-  var addSize = add3.length;
+function appendToArray(ar, add4) {
+  var addSize = add4.length;
   if (addSize === 0) {
     return;
   }
   var baseSize = ar.length;
-  ar.length = baseSize + add3.length;
+  ar.length = baseSize + add4.length;
   for (var i = 0; i < addSize; ++i) {
-    ar[baseSize + i] = add3[i];
+    ar[baseSize + i] = add4[i];
   }
 }
 function uniqueArray(arrArg) {
@@ -20288,7 +20404,7 @@ var {
   PropModSymbol,
   PropModification,
   replacePrefix,
-  add: add2,
+  add: add3,
   remove
 } = Dexie;
 
@@ -21328,9 +21444,20 @@ function view_language_switcher(model) {
 function format_date(time) {
   return to_naive_date_string(time);
 }
-function view_meal_item(meal, is_eaten, language) {
+function view_meal_item(meal, index5, is_eaten, language) {
+  let day_text = (() => {
+    if (index5 === 0) {
+      return "Today";
+    } else {
+      let n = index5;
+      let today = now2();
+      let future_date = add2(today, days(n));
+      let _pipe = weekday2(future_date);
+      return weekday_to_short_string(_pipe);
+    }
+  })();
   return li(
-    toList([class$("p-2 border rounded flex flex-col")]),
+    toList([class$("p-2 border rounded")]),
     toList([
       div(
         toList([class$("flex justify-between items-center w-full")]),
@@ -21338,7 +21465,16 @@ function view_meal_item(meal, is_eaten, language) {
           div(
             toList([class$("flex flex-col gap-0")]),
             toList([
-              text(meal.name),
+              div(
+                toList([class$("flex items-center gap-2")]),
+                toList([
+                  text(meal.name),
+                  span(
+                    toList([class$("text-xs text-gray-400")]),
+                    toList([text(day_text)])
+                  )
+                ])
+              ),
               span(
                 toList([class$("text-xs text-gray-500")]),
                 toList([
@@ -21439,6 +21575,17 @@ function view_meal_item(meal, is_eaten, language) {
     ])
   );
 }
+function view_meals(meals, is_eaten, language) {
+  return ul(
+    toList([class$("space-y-2")]),
+    index_map(
+      meals,
+      (meal, index5) => {
+        return view_meal_item(meal, index5, is_eaten, language);
+      }
+    )
+  );
+}
 function view(model) {
   let uneaten_meals = filter(model.meals, (m) => {
     return !m.eaten;
@@ -21507,15 +21654,7 @@ function view(model) {
               )
             ])
           ),
-          ul(
-            toList([class$("space-y-2")]),
-            map2(
-              uneaten_meals,
-              (meal) => {
-                return view_meal_item(meal, false, model.language);
-              }
-            )
-          ),
+          view_meals(uneaten_meals, false, model.language),
           (() => {
             if (eaten_meals.hasLength(0)) {
               return none2();
@@ -21533,15 +21672,7 @@ function view(model) {
                       )
                     ])
                   ),
-                  ul(
-                    toList([class$("space-y-2")]),
-                    map2(
-                      eaten_meals,
-                      (meal) => {
-                        return view_meal_item(meal, true, model.language);
-                      }
-                    )
-                  )
+                  view_meals(eaten_meals, true, model.language)
                 ])
               );
             }
@@ -21762,7 +21893,7 @@ function main() {
     throw makeError(
       "let_assert",
       "everyday_meals",
-      695,
+      715,
       "main",
       "Pattern match failed, no pattern matched the value.",
       { value: $ }
