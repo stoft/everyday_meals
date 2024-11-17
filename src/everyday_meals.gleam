@@ -353,11 +353,10 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       }
     }
     SetLanguage(lang) -> {
-			let new_model = Model(..model, language: lang, language_dropdown_open: False)
-#(new_model
-      ,
-      save_state(model)
-    )}
+      let new_model =
+        Model(..model, language: lang, language_dropdown_open: False)
+      #(new_model, save_state(model))
+    }
     HandleKeyPress(key) ->
       case key {
         "Enter" -> update(model, AddMeal(model.new_meal))

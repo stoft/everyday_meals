@@ -21701,10 +21701,11 @@ function update(loop$model, loop$msg) {
       }
     } else if (msg instanceof SetLanguage) {
       let lang = msg[0];
-      return [
-        model.withFields({ language: lang, language_dropdown_open: false }),
-        none()
-      ];
+      let new_model = model.withFields({
+        language: lang,
+        language_dropdown_open: false
+      });
+      return [new_model, save_state(model)];
     } else if (msg instanceof HandleKeyPress) {
       let key = msg[0];
       if (key === "Enter") {
@@ -21761,7 +21762,7 @@ function main() {
     throw makeError(
       "let_assert",
       "everyday_meals",
-      694,
+      695,
       "main",
       "Pattern match failed, no pattern matched the value.",
       { value: $ }
