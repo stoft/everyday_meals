@@ -438,7 +438,7 @@ fn get_translation(lang: Language, key: String) -> String {
     En, "eaten_meals" -> "Eaten Meals"
     En, "select_language" -> "Select Language"
 
-    Sv, "title" -> "Var dags mat"
+    Sv, "title" -> "Vardagsmat"
     Sv, "add_meal" -> "Lägg till Måltid"
     Sv, "enter_meal" -> "Ange en ny måltid"
     Sv, "eat" -> "Ät"
@@ -460,12 +460,14 @@ fn get_translation(lang: Language, key: String) -> String {
 }
 
 fn view_language_switcher(model: Model) -> element.Element(Msg) {
-  html.div([attribute.class("fixed top-4 right-4 z-20")], [
+  html.div([], [
     case model.language_dropdown_open {
       True ->
+        // Add overlay to catch outside clicks
         html.div(
           [
-            attribute.class("fixed inset-0 z-10"),
+            attribute.class("fixed inset-0 z-20"),
+            // Fixed to viewport
             event.on_click(CloseLanguageDropdown),
           ],
           [],
@@ -488,7 +490,7 @@ fn view_language_switcher(model: Model) -> element.Element(Msg) {
         html.div(
           [
             attribute.class(
-              "absolute right-0 mt-2 py-2 w-48 bg-white rounded-md shadow-xl z-20 border",
+              "absolute right-0 mt-2 py-2 w-48 bg-white rounded-md shadow-xl z-30 border",
             ),
           ],
           [
@@ -534,18 +536,18 @@ fn view_meal_item(
   is_eaten: Bool,
   language: Language,
 ) -> element.Element(Msg) {
-  html.li([attribute.class("p-4 border rounded flex flex-col")], [
+  html.li([attribute.class("p-2 border rounded flex flex-col")], [
     html.div([attribute.class("flex justify-between items-center w-full")], [
-      html.div([attribute.class("flex flex-col")], [
+      html.div([attribute.class("flex flex-col gap-0")], [
         element.text(meal.name),
-        html.span([attribute.class("text-sm text-gray-500")], [
+        html.span([attribute.class("text-xs text-gray-500")], [
           element.text(case meal.last_eaten {
             Some(time) -> format_date(time)
             None -> "Never eaten"
           }),
         ]),
       ]),
-      html.div([attribute.class("flex items-center gap-2")], [
+      html.div([attribute.class("flex items-center gap-1")], [
         // Only show reorder buttons for planned meals
         case is_eaten {
           True -> element.none()
@@ -606,53 +608,70 @@ fn view(model: Model) -> element.Element(Msg) {
   let uneaten_meals = list.filter(model.meals, fn(m) { !m.eaten })
   let eaten_meals = list.filter(model.meals, fn(m) { m.eaten })
 
-  html.div([attribute.class("max-w-md mx-auto p-4 relative")], [
-    view_language_switcher(model),
-    html.h1([attribute.class("text-2xl font-bold mb-4")], [
-      element.text("🥘 " <> get_translation(model.language, "title")),
-    ]),
-    // Add meal form
-    html.div([attribute.class("flex mb-4")], [
-      html.input([
-        attribute.type_("text"),
-        attribute.value(model.new_meal),
-        attribute.placeholder(get_translation(model.language, "enter_meal")),
-        event.on_input(UpdateNewMeal),
-        event.on_keydown(HandleKeyPress),
-        attribute.class("mr-2 p-2 border rounded"),
-      ]// [],
-      ),
-      html.button(
+  html.div([], [
+    // Regular navbar (not fixed)
+    html.div([attribute.class("bg-white border-b shadow-sm")], [
+      html.div(
         [
-          event.on_click(AddMeal(model.new_meal)),
-          attribute.class("px-4 py-2 bg-blue-500 text-white rounded"),
+          attribute.class(
+            "max-w-md mx-auto px-4 py-3 flex justify-between items-center",
+          ),
         ],
-        [element.text(get_translation(model.language, "add_meal"))],
+        [
+          // Title
+          html.h1([attribute.class("text-2xl font-bold")], [
+            element.text("🥘 " <> get_translation(model.language, "title")),
+          ]),
+          // Language switcher
+          view_language_switcher(model),
+        ],
       ),
     ]),
-    // Uneaten meals list
-    html.ul(
-      [attribute.class("space-y-2")],
-      list.map(uneaten_meals, fn(meal) {
-        view_meal_item(meal, False, model.language)
-      }),
-    ),
-    // Eaten meals section
-    case eaten_meals {
-      [] -> element.none()
-      _ ->
-        html.div([], [
-          html.h2([attribute.class("text-lg font-semibold mt-6 mb-2")], [
-            element.text(get_translation(model.language, "eaten_meals")),
-          ]),
-          html.ul(
-            [attribute.class("space-y-2")],
-            list.map(eaten_meals, fn(meal) {
-              view_meal_item(meal, True, model.language)
-            }),
-          ),
-        ])
-    },
+    // Main content (no extra top padding needed)
+    html.div([attribute.class("max-w-md mx-auto p-4")], [
+      // Add meal form
+      html.div([attribute.class("flex mb-4")], [
+        html.input([
+          attribute.type_("text"),
+          attribute.value(model.new_meal),
+          attribute.placeholder(get_translation(model.language, "enter_meal")),
+          event.on_input(UpdateNewMeal),
+          event.on_keydown(HandleKeyPress),
+          attribute.class("mr-2 p-2 border rounded"),
+        ]// [],
+        ),
+        html.button(
+          [
+            event.on_click(AddMeal(model.new_meal)),
+            attribute.class("px-4 py-2 bg-blue-500 text-white rounded"),
+          ],
+          [element.text(get_translation(model.language, "add_meal"))],
+        ),
+      ]),
+      // Uneaten meals list
+      html.ul(
+        [attribute.class("space-y-2")],
+        list.map(uneaten_meals, fn(meal) {
+          view_meal_item(meal, False, model.language)
+        }),
+      ),
+      // Eaten meals section
+      case eaten_meals {
+        [] -> element.none()
+        _ ->
+          html.div([], [
+            html.h2([attribute.class("text-lg font-semibold mt-6 mb-2")], [
+              element.text(get_translation(model.language, "eaten_meals")),
+            ]),
+            html.ul(
+              [attribute.class("space-y-2")],
+              list.map(eaten_meals, fn(meal) {
+                view_meal_item(meal, True, model.language)
+              }),
+            ),
+          ])
+      },
+    ]),
   ])
 }
 

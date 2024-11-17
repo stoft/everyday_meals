@@ -10686,7 +10686,7 @@ var RXJS_SHARE_REPLAY_DEFAULTS = {
 };
 
 // node_modules/rxdb/dist/esm/plugins/utils/utils-rxdb-version.js
-var RXDB_VERSION = "15.38.1";
+var RXDB_VERSION = "15.38.2";
 
 // node_modules/rxdb/dist/esm/plugins/utils/utils-global.js
 var RXDB_UTILS_GLOBAL = {};
@@ -21225,7 +21225,7 @@ function get_translation(lang, key) {
   } else if (lang instanceof En && key === "select_language") {
     return "Select Language";
   } else if (lang instanceof Sv && key === "title") {
-    return "Var dags mat";
+    return "Vardagsmat";
   } else if (lang instanceof Sv && key === "add_meal") {
     return "L\xE4gg till M\xE5ltid";
   } else if (lang instanceof Sv && key === "enter_meal") {
@@ -21276,14 +21276,14 @@ function view_language_option(label, lang, current) {
 }
 function view_language_switcher(model) {
   return div(
-    toList([class$("fixed top-4 right-4 z-20")]),
+    toList([]),
     toList([
       (() => {
         let $ = model.language_dropdown_open;
         if ($) {
           return div(
             toList([
-              class$("fixed inset-0 z-10"),
+              class$("fixed inset-0 z-20"),
               on_click(new CloseLanguageDropdown())
             ]),
             toList([])
@@ -21308,7 +21308,7 @@ function view_language_switcher(model) {
           return div(
             toList([
               class$(
-                "absolute right-0 mt-2 py-2 w-48 bg-white rounded-md shadow-xl z-20 border"
+                "absolute right-0 mt-2 py-2 w-48 bg-white rounded-md shadow-xl z-30 border"
               )
             ]),
             toList([
@@ -21330,17 +21330,17 @@ function format_date(time) {
 }
 function view_meal_item(meal, is_eaten, language) {
   return li(
-    toList([class$("p-4 border rounded flex flex-col")]),
+    toList([class$("p-2 border rounded flex flex-col")]),
     toList([
       div(
         toList([class$("flex justify-between items-center w-full")]),
         toList([
           div(
-            toList([class$("flex flex-col")]),
+            toList([class$("flex flex-col gap-0")]),
             toList([
               text(meal.name),
               span(
-                toList([class$("text-sm text-gray-500")]),
+                toList([class$("text-xs text-gray-500")]),
                 toList([
                   text(
                     (() => {
@@ -21358,7 +21358,7 @@ function view_meal_item(meal, is_eaten, language) {
             ])
           ),
           div(
-            toList([class$("flex items-center gap-2")]),
+            toList([class$("flex items-center gap-1")]),
             toList([
               (() => {
                 if (is_eaten) {
@@ -21447,78 +21447,107 @@ function view(model) {
     return m.eaten;
   });
   return div(
-    toList([class$("max-w-md mx-auto p-4 relative")]),
+    toList([]),
     toList([
-      view_language_switcher(model),
-      h1(
-        toList([class$("text-2xl font-bold mb-4")]),
-        toList([
-          text("\u{1F958} " + get_translation(model.language, "title"))
-        ])
-      ),
       div(
-        toList([class$("flex mb-4")]),
+        toList([class$("bg-white border-b shadow-sm")]),
         toList([
-          input(
+          div(
             toList([
-              type_("text"),
-              value(model.new_meal),
-              placeholder(
-                get_translation(model.language, "enter_meal")
-              ),
-              on_input((var0) => {
-                return new UpdateNewMeal(var0);
-              }),
-              on_keydown((var0) => {
-                return new HandleKeyPress(var0);
-              }),
-              class$("mr-2 p-2 border rounded")
-            ])
-          ),
-          button(
-            toList([
-              on_click(new AddMeal(model.new_meal)),
-              class$("px-4 py-2 bg-blue-500 text-white rounded")
+              class$(
+                "max-w-md mx-auto px-4 py-3 flex justify-between items-center"
+              )
             ]),
-            toList([text(get_translation(model.language, "add_meal"))])
+            toList([
+              h1(
+                toList([class$("text-2xl font-bold")]),
+                toList([
+                  text(
+                    "\u{1F958} " + get_translation(model.language, "title")
+                  )
+                ])
+              ),
+              view_language_switcher(model)
+            ])
           )
         ])
       ),
-      ul(
-        toList([class$("space-y-2")]),
-        map2(
-          uneaten_meals,
-          (meal) => {
-            return view_meal_item(meal, false, model.language);
-          }
-        )
-      ),
-      (() => {
-        if (eaten_meals.hasLength(0)) {
-          return none2();
-        } else {
-          return div(
-            toList([]),
+      div(
+        toList([class$("max-w-md mx-auto p-4")]),
+        toList([
+          div(
+            toList([class$("flex mb-4")]),
             toList([
-              h2(
-                toList([class$("text-lg font-semibold mt-6 mb-2")]),
+              input(
                 toList([
-                  text(get_translation(model.language, "eaten_meals"))
+                  type_("text"),
+                  value(model.new_meal),
+                  placeholder(
+                    get_translation(model.language, "enter_meal")
+                  ),
+                  on_input((var0) => {
+                    return new UpdateNewMeal(var0);
+                  }),
+                  on_keydown(
+                    (var0) => {
+                      return new HandleKeyPress(var0);
+                    }
+                  ),
+                  class$("mr-2 p-2 border rounded")
                 ])
               ),
-              ul(
-                toList([class$("space-y-2")]),
-                map2(
-                  eaten_meals,
-                  (meal) => {
-                    return view_meal_item(meal, true, model.language);
-                  }
-                )
+              button(
+                toList([
+                  on_click(new AddMeal(model.new_meal)),
+                  class$("px-4 py-2 bg-blue-500 text-white rounded")
+                ]),
+                toList([
+                  text(get_translation(model.language, "add_meal"))
+                ])
               )
             ])
-          );
-        }
-      })()
+          ),
+          ul(
+            toList([class$("space-y-2")]),
+            map2(
+              uneaten_meals,
+              (meal) => {
+                return view_meal_item(meal, false, model.language);
+              }
+            )
+          ),
+          (() => {
+            if (eaten_meals.hasLength(0)) {
+              return none2();
+            } else {
+              return div(
+                toList([]),
+                toList([
+                  h2(
+                    toList([
+                      class$("text-lg font-semibold mt-6 mb-2")
+                    ]),
+                    toList([
+                      text(
+                        get_translation(model.language, "eaten_meals")
+                      )
+                    ])
+                  ),
+                  ul(
+                    toList([class$("space-y-2")]),
+                    map2(
+                      eaten_meals,
+                      (meal) => {
+                        return view_meal_item(meal, true, model.language);
+                      }
+                    )
+                  )
+                ])
+              );
+            }
+          })()
+        ])
+      )
     ])
   );
 }
@@ -21732,7 +21761,7 @@ function main() {
     throw makeError(
       "let_assert",
       "everyday_meals",
-      675,
+      694,
       "main",
       "Pattern match failed, no pattern matched the value.",
       { value: $ }
