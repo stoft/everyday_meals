@@ -548,74 +548,76 @@ fn view_meal_item(
     }
   }
 
-  html.li([attribute.class("p-2 border rounded")], [
-    html.div([attribute.class("flex justify-between items-center w-full")], [
-      html.div([attribute.class("flex flex-col gap-0")], [
-        html.div([attribute.class("flex items-center gap-2")], [
+  html.div([attribute.class("flex items-center")], [
+    // Day label on the left
+    html.div([attribute.class("w-12 text-sm text-gray-500 text-right pr-2")], [
+      element.text(day_text),
+    ]),
+    // Meal card
+    html.li([attribute.class("p-2 border rounded flex-1")], [
+      html.div([attribute.class("flex justify-between items-center w-full")], [
+        html.div([attribute.class("flex flex-col gap-0")], [
           element.text(meal.name),
-          html.span([attribute.class("text-xs text-gray-400")], [
-            element.text(day_text),
+          html.span([attribute.class("text-xs text-gray-500")], [
+            element.text(case meal.last_eaten {
+              Some(time) -> format_date(time)
+              None -> "Never eaten"
+            }),
           ]),
         ]),
-        html.span([attribute.class("text-xs text-gray-500")], [
-          element.text(case meal.last_eaten {
-            Some(time) -> format_date(time)
-            None -> "Never eaten"
-          }),
-        ]),
-      ]),
-      html.div([attribute.class("flex items-center gap-1")], [
-        // Only show reorder buttons for planned meals
-        case is_eaten {
-          True -> element.none()
-          False ->
-            html.div([attribute.class("flex items-center gap-1")], [
-              html.button(
-                [
-                  event.on_click(MoveMealUp(meal.id)),
-                  attribute.class("p-1 text-gray-500 hover:text-blue-500"),
-                  attribute.title("Move up"),
-                ],
-                [element.text("⬆️")],
-              ),
-              html.button(
-                [
-                  event.on_click(MoveMealDown(meal.id)),
-                  attribute.class("p-1 text-gray-500 hover:text-blue-500"),
-                  attribute.title("Move down"),
-                ],
-                [element.text("⬇️")],
-              ),
-            ])
-        },
-        html.button(
-          [
-            event.on_click(ToggleEaten(meal.id)),
-            attribute.class(case is_eaten {
-              True -> "px-3 py-1 border border-gray-300 rounded"
-              False -> "px-3 py-1 bg-green-500 text-white rounded"
-            }),
-          ],
-          [
-            element.text(
-              get_translation(language, case is_eaten {
-                True -> "plan"
-                False -> "eat"
+        html.div([attribute.class("flex items-center gap-1")], [
+          // Only show reorder buttons for planned meals
+          case is_eaten {
+            True -> element.none()
+            False ->
+              html.div([attribute.class("flex items-center gap-1")], [
+                html.button(
+                  [
+                    event.on_click(MoveMealUp(meal.id)),
+                    attribute.class("p-1 text-gray-500 hover:text-blue-500"),
+                    attribute.title("Move up"),
+                  ],
+                  [element.text("⬆️")],
+                ),
+                html.button(
+                  [
+                    event.on_click(MoveMealDown(meal.id)),
+                    attribute.class("p-1 text-gray-500 hover:text-blue-500"),
+                    attribute.title("Move down"),
+                  ],
+                  [element.text("⬇️")],
+                ),
+              ])
+          },
+          html.button(
+            [
+              event.on_click(ToggleEaten(meal.id)),
+              attribute.class(case is_eaten {
+                True -> "px-3 py-1 border border-gray-300 rounded"
+                False -> "px-3 py-1 bg-green-500 text-white rounded"
               }),
-            ),
-          ],
-        ),
-        html.button(
-          [
-            event.on_click(DeleteMeal(meal.id)),
-            attribute.class("p-1 text-gray-500 hover:text-red-500"),
-            attribute.title("Delete meal"),
-          ],
-          [
-            // Trash bin icon using HTML entity
-            html.span([attribute.class("text-xl")], [element.text("🗑️")]),
-          ],
-        ),
+            ],
+            [
+              element.text(
+                get_translation(language, case is_eaten {
+                  True -> "plan"
+                  False -> "eat"
+                }),
+              ),
+            ],
+          ),
+          html.button(
+            [
+              event.on_click(DeleteMeal(meal.id)),
+              attribute.class("p-1 text-gray-500 hover:text-red-500"),
+              attribute.title("Delete meal"),
+            ],
+            [
+              // Trash bin icon using HTML entity
+              html.span([attribute.class("text-xl")], [element.text("🗑️")]),
+            ],
+          ),
+        ]),
       ]),
     ]),
   ])
@@ -660,24 +662,32 @@ fn view(model: Model) -> element.Element(Msg) {
     ]),
     // Main content (no extra top padding needed)
     html.div([attribute.class("max-w-md mx-auto p-4")], [
-      // Add meal form
+      // Add meal form with left spacing to match meal items
       html.div([attribute.class("flex mb-4")], [
-        html.input([
-          attribute.type_("text"),
-          attribute.value(model.new_meal),
-          attribute.placeholder(get_translation(model.language, "enter_meal")),
-          event.on_input(UpdateNewMeal),
-          event.on_keydown(HandleKeyPress),
-          attribute.class("mr-2 p-2 border rounded"),
-        ]// [],
-        ),
-        html.button(
-          [
-            event.on_click(AddMeal(model.new_meal)),
-            attribute.class("px-4 py-2 bg-blue-500 text-white rounded"),
-          ],
-          [element.text(get_translation(model.language, "add_meal"))],
-        ),
+        html.div([attribute.class("w-16")], []),
+        // Spacer to align with day labels
+        html.div([attribute.class("flex-1")], [
+          html.div([attribute.class("flex gap-2")], [
+            html.input([
+              attribute.type_("text"),
+              attribute.value(model.new_meal),
+              attribute.placeholder(get_translation(
+                model.language,
+                "enter_meal",
+              )),
+              event.on_input(UpdateNewMeal),
+              event.on_keydown(HandleKeyPress),
+              attribute.class("flex-1 p-2 border rounded"),
+            ]),
+            html.button(
+              [
+                event.on_click(AddMeal(model.new_meal)),
+                attribute.class("px-4 py-2 bg-blue-500 text-white rounded"),
+              ],
+              [element.text(get_translation(model.language, "add_meal"))],
+            ),
+          ]),
+        ]),
       ]),
       // Uneaten meals list
       view_meals(uneaten_meals, False, model.language),
