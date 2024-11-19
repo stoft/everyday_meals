@@ -17,6 +17,7 @@ import lustre/effect
 import lustre/element
 import lustre/element/html
 import lustre/event
+import meal.{type Meal, Meal}
 import rxdb
 
 pub type Language {
@@ -26,10 +27,6 @@ pub type Language {
   De
   It
   Nl
-}
-
-pub type Meal {
-  Meal(id: String, name: String, eaten: Bool, last_eaten: Option(birl.Time))
 }
 
 type Msg {
@@ -240,7 +237,7 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       Model(..model, db: Some(db)),
       init_collection(db),
     )
-    DatabaseCreated(Error(error)) -> {
+    DatabaseCreated(Error(_error)) -> {
       // Log error or handle it appropriately
       #(model, effect.none())
     }
@@ -369,12 +366,12 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       #(new_model, save_state(new_model))
     }
     MoveMealUp(id) -> {
-      let updated_meals = move_meal(model.meals, id, Up)
+      let updated_meals = meal.move_up(model.meals, id)
       let new_model = Model(..model, meals: updated_meals)
       #(new_model, save_state(new_model))
     }
     MoveMealDown(id) -> {
-      let updated_meals = move_meal(model.meals, id, Down)
+      let updated_meals = meal.move_down(model.meals, id)
       let new_model = Model(..model, meals: updated_meals)
       #(new_model, save_state(new_model))
     }
@@ -386,47 +383,6 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       Model(..model, language_dropdown_open: False),
       effect.none(),
     )
-  }
-}
-
-type Direction {
-  Up
-  Down
-}
-
-// Helper function to move a meal up or down
-fn move_meal(meals: List(Meal), id: String, direction: Direction) -> List(Meal) {
-  // Find the meal and its index
-  let #(before, rest) =
-    list.fold_until(meals, #([], meals), fn(acc, meal) {
-      case meal.id == id {
-        True -> list.Stop(acc)
-        False -> list.Continue(#([meal, ..acc.0], list.drop(acc.1, 1)))
-      }
-    })
-
-  case rest {
-    [] -> meals
-    // Meal not found
-    [meal, ..after] -> {
-      let before = list.reverse(before)
-      case direction {
-        // Moving up
-        Up ->
-          case before {
-            [] -> meals
-            // Already at top
-            [prev, ..earlier] -> list.append(earlier, [meal, prev, ..after])
-          }
-        // Moving down
-        Down ->
-          case after {
-            [] -> meals
-            // Already at bottom
-            [next, ..later] -> list.append(before, [next, meal, ..later])
-          }
-      }
-    }
   }
 }
 
