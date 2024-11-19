@@ -5,4 +5,5 @@ erl_crash.dump
 
 /node_modules
 /priv/static/*.mjs
+/priv/static/*.min.css
 /dist
