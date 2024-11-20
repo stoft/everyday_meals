@@ -353,7 +353,7 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
     SetLanguage(lang) -> {
       let new_model =
         Model(..model, language: lang, language_dropdown_open: False)
-      #(new_model, save_state(model))
+      #(new_model, save_state(new_model))
     }
     HandleKeyPress(key) ->
       case key {
@@ -386,34 +386,93 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
   }
 }
 
-fn get_translation(lang: Language, key: String) -> String {
-  case lang, key {
-    En, "title" -> "Everyday Meals"
-    En, "add_meal" -> "Add Meal"
-    En, "enter_meal" -> "Enter a new meal"
-    En, "eat" -> "Eat"
-    En, "plan" -> "Plan"
-    En, "eaten_meals" -> "Eaten Meals"
-    En, "select_language" -> "Select Language"
+pub type Translations {
+  Translations(
+    title: String,
+    add_meal: String,
+    enter_meal: String,
+    eat: String,
+    plan: String,
+    eaten_meals: String,
+    select_language: String,
+    today: String,
+  )
+}
 
-    Sv, "title" -> "Vardagsmat"
-    Sv, "add_meal" -> "Lägg till Måltid"
-    Sv, "enter_meal" -> "Ange en ny måltid"
-    Sv, "eat" -> "Ät"
-    Sv, "plan" -> "Planera"
-    Sv, "eaten_meals" -> "Ätna Måltider"
-    Sv, "select_language" -> "Välj Språk"
+const en_translations = Translations(
+  title: "Everyday Meals",
+  add_meal: "Add Meal",
+  enter_meal: "Enter a new meal",
+  eat: "Eat",
+  plan: "Plan",
+  eaten_meals: "Eaten Meals",
+  select_language: "Select Language",
+  today: "Today",
+)
 
-    Fr, "title" -> "Suivi des Repas Hebdomadaires"
-    Fr, "add_meal" -> "Ajouter un Repas"
-    Fr, "enter_meal" -> "Entrez un nouveau repas"
-    Fr, "eat" -> "Manger"
-    Fr, "plan" -> "Prévoir"
-    Fr, "eaten_meals" -> "Repas Mangés"
-    Fr, "select_language" -> "Choisir la Langue"
+const sv_translations = Translations(
+  title: "Vardagsmat",
+  add_meal: "Ny måltid",
+  enter_meal: "Lägg till Måltid",
+  eat: "Ät",
+  plan: "Planera",
+  eaten_meals: "Ätna Måltider",
+  select_language: "Välj Språk",
+  today: "Idag",
+)
 
-    // Add other languages...
-    _, _ -> "Translation missing"
+const fr_translations = Translations(
+  title: "Repas Quotidiens",
+  add_meal: "Ajouter un Repas",
+  enter_meal: "Entrez un nouveau repas",
+  eat: "Manger",
+  plan: "Prévoir",
+  eaten_meals: "Repas Mangés",
+  select_language: "Choisir la Langue",
+  today: "Aujourd'hui",
+)
+
+const de_translations = Translations(
+  title: "Alltagsküche",
+  add_meal: "Mahlzeit hinzufügen",
+  enter_meal: "Neue Mahlzeit eingeben",
+  eat: "Essen",
+  plan: "Planen",
+  eaten_meals: "Geschnittene Mahlzeiten",
+  select_language: "Sprache auswählen",
+  today: "Heute",
+)
+
+const it_translations = Translations(
+  title: "Pasto Quotidiano",
+  add_meal: "Aggiungi Pasto",
+  enter_meal: "Inserisci un nuovo pasto",
+  eat: "Mangia",
+  plan: "Pianifica",
+  eaten_meals: "Pasti Mangiati",
+  select_language: "Seleziona Lingua",
+  today: "Oggi",
+)
+
+const nl_translations = Translations(
+  title: "Dagelijkse Kost",
+  add_meal: "Voeg een gerecht toe",
+  enter_meal: "Voeg een nieuw gerecht toe",
+  eat: "Eet",
+  plan: "Plan",
+  eaten_meals: "Gesneden Gerechten",
+  select_language: "Selecteer Taal",
+  today: "Vandaag",
+)
+
+fn get_translation(lang: Language) -> Translations {
+  case lang {
+    En -> en_translations
+    Sv -> sv_translations
+    Fr -> fr_translations
+    De -> de_translations
+    It -> it_translations
+    Nl -> nl_translations
   }
 }
 
@@ -493,10 +552,10 @@ fn view_meal_item(
   meal: Meal,
   index: Int,
   is_eaten: Bool,
-  language: Language,
+  translations: Translations,
 ) -> element.Element(Msg) {
   let day_text = case index {
-    0 -> "Today"
+    0 -> translations.today
     n -> {
       let today = birl.now()
       let future_date = birl.add(today, duration.days(n))
@@ -554,12 +613,10 @@ fn view_meal_item(
               }),
             ],
             [
-              element.text(
-                get_translation(language, case is_eaten {
-                  True -> "plan"
-                  False -> "eat"
-                }),
-              ),
+              element.text(case is_eaten {
+                True -> translations.plan
+                False -> translations.eat
+              }),
             ],
           ),
           html.button(
@@ -583,12 +640,12 @@ fn view_meal_item(
 fn view_meals(
   meals: List(Meal),
   is_eaten: Bool,
-  language: Language,
+  translations: Translations,
 ) -> element.Element(Msg) {
   html.ul(
     [attribute.class("space-y-2")],
     list.index_map(meals, fn(meal, index) {
-      view_meal_item(meal, index, is_eaten, language)
+      view_meal_item(meal, index, is_eaten, translations)
     }),
   )
 }
@@ -596,6 +653,8 @@ fn view_meals(
 fn view(model: Model) -> element.Element(Msg) {
   let uneaten_meals = list.filter(model.meals, fn(m) { !m.eaten })
   let eaten_meals = list.filter(model.meals, fn(m) { m.eaten })
+
+  let translations = get_translation(model.language)
 
   html.div([], [
     // Regular navbar (not fixed)
@@ -609,7 +668,7 @@ fn view(model: Model) -> element.Element(Msg) {
         [
           // Title
           html.h1([attribute.class("text-2xl font-bold")], [
-            element.text("🥘 " <> get_translation(model.language, "title")),
+            element.text("🥘 " <> translations.title),
           ]),
           // Language switcher
           view_language_switcher(model),
@@ -627,10 +686,7 @@ fn view(model: Model) -> element.Element(Msg) {
             html.input([
               attribute.type_("text"),
               attribute.value(model.new_meal),
-              attribute.placeholder(get_translation(
-                model.language,
-                "enter_meal",
-              )),
+              attribute.placeholder(translations.enter_meal),
               event.on_input(UpdateNewMeal),
               event.on_keydown(HandleKeyPress),
               attribute.class("flex-1 p-2 border rounded"),
@@ -640,22 +696,22 @@ fn view(model: Model) -> element.Element(Msg) {
                 event.on_click(AddMeal(model.new_meal)),
                 attribute.class("px-4 py-2 bg-blue-500 text-white rounded"),
               ],
-              [element.text(get_translation(model.language, "add_meal"))],
+              [element.text(translations.add_meal)],
             ),
           ]),
         ]),
       ]),
       // Uneaten meals list
-      view_meals(uneaten_meals, False, model.language),
+      view_meals(uneaten_meals, False, translations),
       // Eaten meals section
       case eaten_meals {
         [] -> element.none()
         _ ->
           html.div([], [
             html.h2([attribute.class("text-lg font-semibold mt-6 mb-2")], [
-              element.text(get_translation(model.language, "eaten_meals")),
+              element.text(translations.eaten_meals),
             ]),
-            view_meals(eaten_meals, True, model.language),
+            view_meals(eaten_meals, True, translations),
           ])
       },
     ]),
