@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  deploy:
+  deploy-frontend:
     name: Deploy to Cloudflare Pages
     runs-on: ubuntu-latest
     permissions:
@@ -22,16 +22,19 @@ jobs:
           gleam-version: "1.6.1"
           rebar3-version: "3"
       - name: Install dependencies
+        working-directory: ./frontend
         run: gleam deps download
       - name: Install npm deps
+        working-directory: ./frontend
         run: npm ci
       - name: Build app
+        working-directory: ./frontend
         run: gleam run -m lustre/dev build app --minify
       - name: Copy output to dist
         run: |
           mkdir -p dist
-          cp index.html dist/index.html
-          cp -r priv dist/priv
+          cp frontend/index.html dist/index.html
+          cp -r frontend/priv dist/priv
       - name: Update path in index.html to use minified app
         run: sed -i 's|priv/static/everyday_meals.mjs|priv/static/everyday_meals.min.mjs|' dist/index.html
       - name: Debug
