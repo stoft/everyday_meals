@@ -18,7 +18,10 @@ import lustre/element
 import lustre/element/html
 import lustre/event
 import meal.{type Meal, Meal}
+import omnimessage_lustre.{type Connection, type EncoderDecoder} as omniclient
+import plinth/javascript/storage.{type Storage}
 import rxdb
+import shared.{type ClientMessage, type ServerMessage}
 
 pub type Language {
   En
@@ -39,11 +42,14 @@ type Msg {
   MoveMealUp(String)
   MoveMealDown(String)
   ToggleLanguageDropdown
-  DatabaseCreated(Result(rxdb.Database, String))
-  CollectionCreated(Result(rxdb.Collection, String))
   StateLoaded(Result(PersistedModel, String))
   StateSaved(Result(Nil, String))
   CloseLanguageDropdown
+  // ConnectionEstablished(
+  //   Result(omniclient.Connection(ClientMessage, ServerMessage), String),
+  // )
+  // MessageReceived(ServerMessage)
+  NoOp
 }
 
 pub type Model {
@@ -52,8 +58,7 @@ pub type Model {
     new_meal: String,
     language: Language,
     language_dropdown_open: Bool,
-    db: Option(rxdb.Database),
-    collection: Option(rxdb.Collection),
+    // connection: Option(Connection(ClientMessage, ServerMessage)),
   )
 }
 
@@ -86,19 +91,6 @@ const schema = "{
   }
 }"
 
-// Add encoding functions
-fn encode_meal(meal: Meal) -> json.Json {
-  json.object([
-    #("id", json.string(meal.id)),
-    #("name", json.string(meal.name)),
-    #("eaten", json.bool(meal.eaten)),
-    #("last_eaten", case meal.last_eaten {
-      Some(time) -> json.int(birl.to_unix(time))
-      None -> json.null()
-    }),
-  ])
-}
-
 fn encode_language(lang: Language) -> json.Json {
   json.string(case lang {
     En -> "en"
@@ -108,30 +100,6 @@ fn encode_language(lang: Language) -> json.Json {
     It -> "it"
     Nl -> "nl"
   })
-}
-
-fn init_database() -> effect.Effect(Msg) {
-  effect.from(fn(callback) {
-    let _promise = {
-      rxdb.create_database("everyday_meals")
-      |> promise.map(fn(db) { callback(Ok(db)) })
-      |> promise.rescue(fn(error) { callback(Error(string.inspect(error))) })
-    }
-    Nil
-  })
-  |> effect.map(DatabaseCreated)
-}
-
-fn init_collection(db: rxdb.Database) -> effect.Effect(Msg) {
-  effect.from(fn(callback) {
-    let _promise = {
-      rxdb.create_collection(db, "state", schema)
-      |> promise.map(fn(collection) { callback(Ok(collection)) })
-      |> promise.rescue(fn(error) { callback(Error(string.inspect(error))) })
-    }
-    Nil
-  })
-  |> effect.map(CollectionCreated)
 }
 
 fn read_state(collection: rxdb.Collection) -> effect.Effect(Msg) {
@@ -154,21 +122,6 @@ fn read_state(collection: rxdb.Collection) -> effect.Effect(Msg) {
   |> effect.map(StateLoaded)
 }
 
-fn decode_meal() -> decode.Decoder(Meal) {
-  use id <- decode.field("id", decode.string)
-  use name <- decode.field("name", decode.string)
-  use eaten <- decode.field("eaten", decode.bool)
-  use last_eaten <- decode.field(
-    "last_eaten",
-    decode.optional(
-      decode.int
-      |> decode.then(fn(t) { decode.success(birl.from_unix(t)) }),
-    ),
-  )
-
-  decode.success(Meal(id: id, name: name, eaten: eaten, last_eaten: last_eaten))
-}
-
 fn decode_language() -> decode.Decoder(Language) {
   decode.string
   |> decode.then(fn(str) {
@@ -181,57 +134,112 @@ fn decode_language() -> decode.Decoder(Language) {
 }
 
 fn decode_state() -> decode.Decoder(PersistedModel) {
-  use meals <- decode.field("meals", decode.list(decode_meal()))
+  use meals <- decode.field("meals", decode.list(meal.decoder()))
   use lang <- decode.field("language", decode_language())
   decode.success(PersistedModel(meals: meals, language: lang))
 }
 
-fn save_state(model: Model) -> effect.Effect(Msg) {
-  io.debug("save_state")
-  case model.collection {
-    None -> effect.none()
-    Some(collection) -> {
-      io.debug("save_state: collection")
-      let state =
-        json.object([
-          #("id", json.string("current")),
-          #("meals", json.array(model.meals, encode_meal)),
-          #("language", encode_language(model.language)),
-        ])
-        |> json.to_string
-
-      effect.from(fn(callback) {
-        let _promise = {
-          rxdb.upsert(collection, state)
-          |> promise.map(fn(_) { callback(Ok(Nil)) })
-          |> promise.rescue(fn(error) {
-            io.debug("save_state: error")
-            io.debug(string.inspect(error))
-            callback(Error(string.inspect(error)))
-          })
-        }
-        Nil
-      })
-      |> effect.map(StateSaved)
+fn load_state() -> effect.Effect(Msg) {
+  effect.from(fn(callback) {
+    let result = {
+      use storage <- result.try(storage.local())
+      use json_str <- result.try(storage.get_item(
+        storage,
+        "everyday_meals_state",
+      ))
+      use state <- result.try(
+        json.decode(json_str, decode_state())
+        |> result.map_error(fn(e) { string.inspect(e) }),
+      )
+      Ok(state)
     }
-  }
+    callback(result)
+    Nil
+  })
+  |> effect.map(StateLoaded)
+}
+
+fn save_state(model: Model) -> effect.Effect(Msg) {
+  effect.from(fn(callback) {
+    let result = {
+      let state = PersistedModel(meals: model.meals, language: model.language)
+      let json =
+        json.object([
+          #("meals", json.array(state.meals, shared.meal_to_json)),
+          #("language", encode_language(state.language)),
+        ])
+      use storage <- result.try(storage.local())
+      storage.set_item(storage, "everyday_meals_state", json.to_string(json))
+    }
+    callback(result)
+    Nil
+  })
+  |> effect.map(StateSaved)
 }
 
 fn init(_flags) -> #(Model, effect.Effect(Msg)) {
-  #(
+  let model: Model =
     Model(
       meals: [],
       new_meal: "",
       language: En,
       language_dropdown_open: False,
-      db: None,
-      collection: None,
-    ),
-    init_database(),
-  )
+      connection: None,
+    )
+
+  // Try RxDB first, if data exists migrate it to local storage
+  let effects =
+    effect.batch([
+      check_and_migrate_rxdb(),
+      load_state(),
+      // This will load from local storage after migration
+      connect(),
+    ])
+
+  #(model, effects)
 }
 
-fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
+fn check_and_migrate_rxdb() -> effect.Effect(Msg) {
+  effect.from(fn(callback) {
+    // Try to read from RxDB
+    let _promise = {
+      use db <- result.try(rxdb.create_database("everyday_meals"))
+      use collection <- result.try(rxdb.create_collection(db, "state", schema))
+      use state <- result.try(rxdb.find_one(collection, "current"))
+
+      // If we got data, decode it and save to local storage
+      case decode.run(dynamic.from(state), decode_state()) {
+        Ok(state) -> {
+          let _ = storage.save_meals(state.meals)
+          // Clean up RxDB after successful migration
+          let _ = rxdb.delete_database("everyday_meals")
+          callback(Ok(Nil))
+        }
+        Error(_) -> callback(Error("Failed to decode RxDB state"))
+      }
+    }
+    Nil
+  })
+  |> effect.map(fn(result) {
+    case result {
+      Ok(_) -> io.debug("RxDB migration complete")
+      Error(e) -> io.debug("No RxDB data found or error: " <> e)
+    }
+    // Return a no-op message since we don't need to update the model
+    NoOp
+  })
+}
+
+fn connect() -> effect.Effect(Msg) {
+  omniclient.connect(
+    "ws://localhost:8000/ws",
+    shared.encode_client_message,
+    shared.decode_server_message,
+  )
+  |> effect.map(ConnectionEstablished)
+}
+
+fn update(model: Model, msg: Msg) {
   case msg {
     DatabaseCreated(Ok(db)) -> #(
       Model(..model, db: Some(db)),
@@ -285,17 +293,35 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
               name: name,
               eaten: False,
               last_eaten: None,
-            )
-          let new_model =
-            Model(
-              ..model,
-              meals: list.append(model.meals, [new_meal]),
-              new_meal: "",
+              modified_at: birl.now(),
             )
 
-          #(new_model, save_state(new_model))
+          case model.connection {
+            Some(connection) -> {
+              // If online, send to server
+              let effect = omniclient.send(connection, shared.AddMeal(new_meal))
+              #(Model(..model, new_meal: ""), effect)
+            }
+            None -> {
+              // If offline, save locally
+              let new_meals = [new_meal, ..model.meals]
+              let _ = storage.save_meals(new_meals)
+              #(Model(..model, meals: new_meals, new_meal: ""), effect.none())
+            }
+          }
         }
       }
+
+    MessageReceived(shared.ServerUpsertMeals(meals)) -> {
+      let new_meals =
+        dict.values(meals)
+        |> list.sort(by: fn(a, b) { string.compare(a.name, b.name) })
+
+      // Save server state to local storage
+      let _ = storage.save_meals(new_meals)
+
+      #(Model(..model, meals: new_meals), effect.none())
+    }
     UpdateNewMeal(value) -> #(Model(..model, new_meal: value), effect.none())
     ToggleEaten(id) -> {
       let current_time = birl.now()
@@ -383,6 +409,7 @@ fn update(model: Model, msg: Msg) -> #(Model, effect.Effect(Msg)) {
       Model(..model, language_dropdown_open: False),
       effect.none(),
     )
+    NoOp -> #(model, effect.none())
   }
 }
 
@@ -719,20 +746,6 @@ fn view(model: Model) -> element.Element(Msg) {
 }
 
 pub fn main() {
-  let init = fn(_) {
-    #(
-      Model(
-        meals: [],
-        new_meal: "",
-        language: En,
-        language_dropdown_open: False,
-        db: None,
-        collection: None,
-      ),
-      init_database(),
-    )
-  }
-
   let app = lustre.application(init, update, view)
   let assert Ok(_) = lustre.start(app, "#app", Nil)
   Nil
