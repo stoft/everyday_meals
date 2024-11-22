@@ -13,10 +13,12 @@ version = "1.0.0"
 # https://gleam.run/writing-gleam/gleam-toml/.
 
 [dependencies]
-gleam_stdlib = ">= 0.34.0 and < 2.0.0"
+gleam_stdlib = ">= 0.41.0 and < 2.0.0"
 omnimessage_server = ">= 0.1.0 and < 1.0.0"
 wisp = ">= 1.2.0 and < 2.0.0"
 mist = ">= 3.0.0 and < 4.0.0"
+shared = { path = "../shared" }
+gleam_json = "1.0.1"
 
 [dev-dependencies]
 gleeunit = ">= 1.0.0 and < 2.0.0"
