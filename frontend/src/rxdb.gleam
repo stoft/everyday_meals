@@ -28,3 +28,6 @@ pub fn find_one(
   collection: Collection,
   id: String,
 ) -> promise.Promise(dynamic.Dynamic)
+
+@external(javascript, "./rxdb.js", "deleteDatabase")
+pub fn delete_database(name: String) -> promise.Promise(Nil)

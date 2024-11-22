@@ -1,4 +1,4 @@
-import { createRxDatabase, addRxPlugin } from "rxdb";
+import { createRxDatabase, removeRxDatabase } from "rxdb";
 import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
 
 export function createDatabase(name) {
@@ -27,4 +27,8 @@ export function upsert(collection, doc) {
 
 export function findOne(collection, id) {
   return collection.findOne(id).exec();
+}
+
+export function deleteDatabase(name) {
+  return removeRxDatabase(name);
 }

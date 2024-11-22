@@ -2,6 +2,7 @@ import birl
 import decode/zero as decode
 import gleam/dict
 import gleam/dynamic
+import gleam/json
 import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should

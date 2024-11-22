@@ -43,6 +43,10 @@ pub fn encode(meal: Meal) -> json.Json {
   ])
 }
 
+pub fn encode_list(meals: List(Meal)) -> json.Json {
+  meals |> json.array(encode)
+}
+
 pub fn decoder() -> zero.Decoder(Meal) {
   use id <- zero.field("id", zero.string)
   use name <- zero.field("name", zero.string)
