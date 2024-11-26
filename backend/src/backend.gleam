@@ -1,16 +1,14 @@
 import gleam/erlang/process
-
 import mist
-import wisp
-
-import server/context
+import server/context.{type Context, Context}
 import server/router
+import wisp
 
 pub fn main() {
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
 
-  let assert Ok(context) = context.new()
+  let assert Ok(context) = Ok(Context([]))
 
   let handler = fn(req) { router.mist_handler(req, context, secret_key_base) }
 

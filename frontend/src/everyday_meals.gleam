@@ -1,6 +1,6 @@
 import birl
 import birl/duration
-import decode/zero as decode
+import decode/zero
 import gleam/dynamic
 import gleam/int
 import gleam/io
@@ -10,6 +10,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import json_extra
 import lucide_lustre as lucide
 import lustre
 import lustre/attribute
@@ -17,12 +18,16 @@ import lustre/effect
 import lustre/element
 import lustre/element/html
 import lustre/event
-import meal.{type Meal, Meal}
-
-// import omnimessage_lustre.{type Connection, type EncoderDecoder} as omniclient
+import meal.{
+  type ClientMessage, type Meal, type ServerMessage, ChangeState, Meal,
+  StateChanged,
+}
+import omnimessage_lustre.{type EncoderDecoder} as omniclient
+import omnimessage_lustre/transports
 import plinth/javascript/storage.{type Storage}
 import rxdb
-import shared.{type ClientMessage, type ServerMessage}
+
+// import shared.{type ClientMessage, type ServerMessage, ClientMessage}
 
 pub type Language {
   En
@@ -49,6 +54,9 @@ type Msg {
   StateSaved(Result(Nil, String))
   CloseLanguageDropdown
   NoOp
+  ClientMessage(ClientMessage)
+  ServerMessage(ServerMessage)
+  TransportState(transports.TransportState(json.DecodeError))
 }
 
 pub type Model {
@@ -100,21 +108,21 @@ fn encode_language(lang: Language) -> json.Json {
   })
 }
 
-fn decode_language() -> decode.Decoder(Language) {
-  decode.string
-  |> decode.then(fn(str) {
+fn decode_language() -> zero.Decoder(Language) {
+  zero.string
+  |> zero.then(fn(str) {
     case str {
-      "en" -> decode.success(En)
-      "sv" -> decode.success(Sv)
-      _ -> decode.failure(En, "Language not supported")
+      "en" -> zero.success(En)
+      "sv" -> zero.success(Sv)
+      _ -> zero.failure(En, "Language not supported")
     }
   })
 }
 
-fn decode_state() -> decode.Decoder(PersistedModel) {
-  use meals <- decode.field("meals", decode.list(meal.decoder()))
-  use lang <- decode.field("language", decode_language())
-  decode.success(PersistedModel(meals: meals, language: lang))
+fn decode_state() -> zero.Decoder(PersistedModel) {
+  use meals <- zero.field("meals", zero.list(meal.decoder()))
+  use lang <- zero.field("language", decode_language())
+  zero.success(PersistedModel(meals: meals, language: lang))
 }
 
 fn load_state() -> effect.Effect(Msg) {
@@ -128,7 +136,7 @@ fn load_state() -> effect.Effect(Msg) {
         |> result.replace_error("Failed to get item"),
       )
       use state <- result.try(
-        json.decode(json_str, decode.run(_, decode_state()))
+        json_extra.decode_from_string(json_str, decode_state())
         |> result.map_error(fn(e) { string.inspect(e) }),
       )
 
@@ -178,7 +186,7 @@ fn read_state(collection: rxdb.Collection) -> effect.Effect(Msg) {
     let _promise =
       rxdb.find_one(collection, "current")
       |> promise.map(fn(state) {
-        let result = decode.run(dynamic.from(state), decode_state())
+        let result = zero.run(dynamic.from(state), decode_state())
         case result {
           Ok(state) -> {
             // Parse the state and update the model
@@ -201,7 +209,7 @@ fn check_and_migrate_rxdb() -> effect.Effect(Msg) {
       |> promise.await(fn(db) { rxdb.create_collection(db, "state", schema) })
       |> promise.await(fn(collection) { rxdb.find_one(collection, "current") })
       |> promise.map(fn(state) {
-        let result = decode.run(dynamic.from(state), decode_state())
+        let result = zero.run(dynamic.from(state), decode_state())
         case result {
           Ok(state) if state.meals != [] -> {
             io.debug("found meals: Migrating RxDB data to local storage")
@@ -389,6 +397,18 @@ fn update(model: Model, msg: Msg) {
       effect.none(),
     )
     NoOp -> #(model, effect.none())
+    TransportState(state) -> {
+      io.debug(string.inspect(state))
+      #(model, effect.none())
+    }
+    ServerMessage(msg) -> {
+      io.debug(string.inspect(msg))
+      #(model, effect.none())
+    }
+    ClientMessage(msg) -> {
+      io.debug(string.inspect(msg))
+      #(model, effect.none())
+    }
   }
 }
 
@@ -725,7 +745,33 @@ fn view(model: Model) -> element.Element(Msg) {
 }
 
 pub fn main() {
-  let app = lustre.application(init, update, view)
-  let assert Ok(_) = lustre.start(app, "#app", Nil)
+  let codec =
+    omniclient.EncoderDecoder(
+      fn(msg) {
+        case msg {
+          // Messages must be encodable
+          ClientMessage(message) -> Ok(meal.encode_client_msg(message))
+          // Return Error(Nil) for messages you don't want to send out
+          _ -> Error(Nil)
+        }
+      },
+      fn(encoded_msg) {
+        // Unsupported messages will cause TransportError(DecodeError(error))
+        meal.decode_server_msg(encoded_msg)
+        |> result.map(ServerMessage)
+      },
+    )
+
+  let app2 =
+    omniclient.application(
+      init,
+      update,
+      view,
+      codec,
+      transports.websocket("http://localhost:8000/omni-pipe-ws"),
+      TransportState,
+    )
+  // let app = lustre.application(init, update, view)
+  let assert Ok(_) = lustre.start(app2, "#app", Nil)
   Nil
 }

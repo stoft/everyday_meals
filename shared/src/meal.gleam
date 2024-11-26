@@ -3,6 +3,8 @@ import decode/zero
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
+import json_extra
 
 pub type MealId =
   String
@@ -72,4 +74,39 @@ pub fn decoder() -> zero.Decoder(Meal) {
     last_eaten: last_eaten,
     modified_at: modified_at,
   ))
+}
+
+pub fn decode_client_msg(msg: String) -> Result(ClientMessage, _) {
+  msg
+  |> json_extra.decode_from_string(zero.list(decoder()))
+  // |> result.replace_error(Nil)
+  |> result.map(ChangeState)
+}
+
+pub fn encode_client_msg(msg: ClientMessage) -> String {
+  case msg {
+    ChangeState(meals) -> encode_list(meals)
+  }
+  |> json.to_string
+}
+
+pub fn decode_server_msg(msg: String) -> Result(ServerMessage, json.DecodeError) {
+  msg
+  |> json_extra.decode_from_string(zero.list(decoder()))
+  |> result.map(StateChanged)
+}
+
+pub fn encode_server_msg(msg: ServerMessage) -> String {
+  case msg {
+    StateChanged(meals) -> encode_list(meals)
+  }
+  |> json.to_string
+}
+
+pub type ClientMessage {
+  ChangeState(List(Meal))
+}
+
+pub type ServerMessage {
+  StateChanged(List(Meal))
 }

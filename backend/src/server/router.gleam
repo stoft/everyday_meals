@@ -1,25 +1,25 @@
+import filepath
 import gleam/http
 import gleam/http/request
 import gleam/http/response
 import gleam/json
 import gleam/result
-
-import filepath
-import lustre_pipes/attribute
-import lustre_pipes/element.{children, empty, text_content}
-import lustre_pipes/element/html.{html}
+import meal
 import mist
 import omnimessage_server as omniserver
+import server/context.{type Context}
+import shared
 import wisp.{type Request, type Response}
 import wisp/wisp_mist
 
-import server/components/chat
-import server/context.{type Context}
-import shared
+// import lustre_pipes/attribute
+// import lustre_pipes/element.{children, empty, text_content}
+// import lustre_pipes/element/html.{html}
+// import server/components/chat
 
 type Msg {
-  ClientMessage(shared.ClientMessage)
-  ServerMessage(shared.ServerMessage)
+  ClientMessage(meal.ClientMessage)
+  ServerMessage(meal.ServerMessage)
   Noop
 }
 
@@ -28,7 +28,7 @@ fn encoder_decoder() -> omniserver.EncoderDecoder(Msg, String, json.DecodeError)
     fn(msg) {
       case msg {
         // Messages must be encodable
-        ServerMessage(message) -> Ok(shared.encode_server_message(message))
+        ServerMessage(message) -> Ok(meal.encode_server_msg(message))
         // Return Error(Nil) for messages you don't want to send out
         _ -> Error(Nil)
       }
@@ -36,7 +36,7 @@ fn encoder_decoder() -> omniserver.EncoderDecoder(Msg, String, json.DecodeError)
     fn(encoded_msg) {
       // Unsupported messages will cause TransportError(DecodeError(error)) 
       // which you can ignore if you don't care about those messages
-      shared.decode_client_message(encoded_msg)
+      meal.decode_client_msg(encoded_msg)
       |> result.map(ClientMessage)
     },
   )
@@ -44,25 +44,24 @@ fn encoder_decoder() -> omniserver.EncoderDecoder(Msg, String, json.DecodeError)
 
 fn handle(ctx: Context, msg: Msg) -> Msg {
   case msg {
-    ClientMessage(shared.UserSendMessage(message)) -> {
-      ctx |> context.add_message(message)
+    ClientMessage(meal.ChangeState(meals)) -> {
+      ctx |> context.change_state(meals)
 
-      context.get_chat_messages(ctx)
-      |> shared.ServerUpsertMessages
+      meal.StateChanged(meals)
       |> ServerMessage
     }
-    ClientMessage(shared.UserDeleteMessage(message_id)) -> {
-      ctx |> context.delete_message(message_id)
 
-      context.get_chat_messages(ctx)
-      |> shared.ServerUpsertMessages
-      |> ServerMessage
-    }
-    ClientMessage(shared.FetchMessages) -> {
-      context.get_chat_messages(ctx)
-      |> shared.ServerUpsertMessages
-      |> ServerMessage
-    }
+    // ClientMessage(shared.UserDeleteMessage(message_id)) -> {
+    //   ctx |> context.delete_message(message_id)
+    //   context.get_chat_messages(ctx)
+    //   |> shared.ServerUpsertMessages
+    //   |> ServerMessage
+    // }
+    // ClientMessage(shared.FetchMessages) -> {
+    //   context.get_chat_messages(ctx)
+    //   |> shared.ServerUpsertMessages
+    //   |> ServerMessage
+    // }
     ServerMessage(_) | Noop -> Noop
   }
 }
@@ -90,15 +89,15 @@ fn cors_middleware(req: Request, fun: fn() -> Response) -> Response {
   }
 }
 
-fn static_middleware(req: Request, fun: fn() -> Response) -> Response {
-  let assert Ok(priv) = wisp.priv_directory("server")
-  let priv_static = filepath.join(priv, "static")
-  wisp.serve_static(req, under: "/priv/static", from: priv_static, next: fun)
-}
+// fn static_middleware(req: Request, fun: fn() -> Response) -> Response {
+//   let assert Ok(priv) = wisp.priv_directory("server")
+//   let priv_static = filepath.join(priv, "static")
+//   wisp.serve_static(req, under: "/priv/static", from: priv_static, next: fun)
+// }
 
 fn wisp_handler(req, ctx) {
   use <- cors_middleware(req)
-  use <- static_middleware(req)
+  // use <- static_middleware(req)
 
   // For handling HTTP transports
   use <- omniserver.wisp_http_middleware(
@@ -110,7 +109,8 @@ fn wisp_handler(req, ctx) {
 
   case wisp.path_segments(req), req.method {
     // Home
-    [], http.Get -> home()
+    [], http.Get -> wisp.redirect("http://localhost:1234")
+    // TODO: change to redirect to frontend
     //
     // If you want extra control, this is how you'd do it without middleware:
     //
@@ -141,8 +141,8 @@ pub fn mist_handler(
     |> wisp_mist.handler(secret_key_base)
 
   case request.path_segments(req), req.method {
-    ["omni-app-ws"], http.Get ->
-      omniserver.mist_websocket_application(req, chat.app(), ctx, fn(_) { Nil })
+    // ["omni-app-ws"], http.Get ->
+    //   omniserver.mist_websocket_application(req, chat.app(), ctx, fn(_) { Nil })
     ["omni-pipe-ws"], http.Get ->
       omniserver.mist_websocket_pipe(
         req,
@@ -154,58 +154,57 @@ pub fn mist_handler(
     _, _ -> wisp_mist_handler(req)
   }
 }
+// fn page_scaffold(
+//   content: element.Element(a),
+//   init_json: String,
+// ) -> element.Element(a) {
+//   html.html()
+//   |> attribute.attribute("lang", "en")
+//   |> children([
+//     html.head()
+//     |> children([
+//       html.meta()
+//         |> attribute.attribute("charset", "UTF-8")
+//         |> empty(),
+//       html.meta()
+//         |> attribute.name("viewport")
+//         |> attribute.attribute(
+//           "content",
+//           "width=device-width, initial-scale=1.0",
+//         )
+//         |> empty(),
+//       html.title()
+//         |> text_content("Lustre Omnistate"),
+//       html.link()
+//         |> attribute.href("/static/client.css")
+//         |> attribute.rel("stylesheet")
+//         |> empty(),
+//       html.script()
+//         |> attribute.src("/static/client.mjs")
+//         |> attribute.type_("module")
+//         |> empty(),
+//       html.script()
+//         |> attribute.id("model")
+//         |> attribute.type_("module")
+//         |> text_content(init_json),
+//       html.body()
+//         |> children([
+//           html.div()
+//           |> attribute.id("app")
+//           |> children([content]),
+//         ]),
+//     ]),
+//   ])
+// }
 
-fn page_scaffold(
-  content: element.Element(a),
-  init_json: String,
-) -> element.Element(a) {
-  html.html()
-  |> attribute.attribute("lang", "en")
-  |> children([
-    html.head()
-    |> children([
-      html.meta()
-        |> attribute.attribute("charset", "UTF-8")
-        |> empty(),
-      html.meta()
-        |> attribute.name("viewport")
-        |> attribute.attribute(
-          "content",
-          "width=device-width, initial-scale=1.0",
-        )
-        |> empty(),
-      html.title()
-        |> text_content("Lustre Omnistate"),
-      html.link()
-        |> attribute.href("/static/client.css")
-        |> attribute.rel("stylesheet")
-        |> empty(),
-      html.script()
-        |> attribute.src("/static/client.mjs")
-        |> attribute.type_("module")
-        |> empty(),
-      html.script()
-        |> attribute.id("model")
-        |> attribute.type_("module")
-        |> text_content(init_json),
-      html.body()
-        |> children([
-          html.div()
-          |> attribute.id("app")
-          |> children([content]),
-        ]),
-    ]),
-  ])
-}
-
-fn home() -> Response {
-  wisp.response(200)
-  |> wisp.set_header("Content-Type", "text/html")
-  |> wisp.html_body(
-    // content
-    html.div()
-    |> empty()
-    |> page_scaffold("")
-    |> element.to_document_string_builder(),
-  )
-}
+// fn home() -> Response {
+//   wisp.response(200)
+//   |> wisp.set_header("Content-Type", "text/html")
+//   |> wisp.html_body(
+//     // content
+//     html.div()
+//     |> empty()
+//     |> page_scaffold("")
+//     |> element.to_document_string_builder(),
+//   )
+// }
